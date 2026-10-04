@@ -1,0 +1,44 @@
+name: Publish signed Multipla Siem release
+on:
+  push:
+    branches: [main]
+    paths: ['release/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: signed-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned Go toolchain
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' https://go.dev/dl/go1.27.1.linux-amd64.tar.gz -o "$RUNNER_TEMP/go.tar.gz"
+          echo "63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445  $RUNNER_TEMP/go.tar.gz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/multipla-go"
+          tar -xzf "$RUNNER_TEMP/go.tar.gz" -C "$RUNNER_TEMP/multipla-go"
+          echo "$RUNNER_TEMP/multipla-go/go/bin" >> "$GITHUB_PATH"
+      - name: Check and build
+        env:
+          CGO_ENABLED: '0'
+          GOTELEMETRY: 'off'
+        run: |
+          go test -mod=vendor ./...
+          go vet -mod=vendor ./...
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            GOOS=linux GOARCH="$arch" go build -mod=vendor -buildvcs=false -trimpath -ldflags '-s -w' -o "dist/multipla-siem-linux-$arch" .
+          done
+      - name: Verify signatures and exact binary hashes
+        run: python3 .github/verify-release.py
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(python3 -c "import json; print(json.load(open('release/manifest-amd64.json'))['version'])")
+          gh release create "v$version" --target "$GITHUB_SHA" --title "Multipla Siem $version" --notes-file RELEASE-NOTES.md --latest dist/multipla-siem-linux-amd64 dist/multipla-siem-linux-arm64 release/manifest-amd64.json release/manifest-amd64.sig release/manifest-arm64.json release/manifest-arm64.sig

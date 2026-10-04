@@ -1,0 +1,8 @@
+<!-- Insira dentro de ossec_config em /var/ossec/etc/ossec.conf. -->
+<integration>
+  <name>custom-multipla-siem</name>
+  <hook_url>https://siem.example.com/api/wazuh</hook_url>
+  <api_key>SUBSTITUA_PELO_INGEST_TOKEN</api_key>
+  <level>5</level>
+  <alert_format>json</alert_format>
+</integration>

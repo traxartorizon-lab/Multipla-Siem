@@ -1,0 +1,40 @@
+[Unit]
+Description=Multipla Siem - Security Information and Event Management
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=multipla-siem
+Group=multipla-siem
+WorkingDirectory=/var/lib/multipla-siem
+LoadCredential=secrets.env:/etc/multipla-siem/secrets.env
+ExecStartPre=+/usr/bin/systemctl start multipla-firstboot.service
+ExecStart=/usr/local/bin/multipla-siem -config /var/lib/multipla-siem/config.json
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/multipla-siem
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+MemoryMax=512M
+TasksMax=128
+LimitNOFILE=4096
+LimitCORE=0
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Multipla Siem - HTTPS e cadastro no primeiro boot
+Wants=network-online.target
+After=network-online.target
+Before=getty@tty1.service
+ConditionPathExists=!/etc/multipla-siem/configured
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/multipla-siem -firstboot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

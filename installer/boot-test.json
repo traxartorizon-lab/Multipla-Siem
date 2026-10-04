@@ -1,0 +1,24 @@
+[
+  {
+    "mode": "bios",
+    "status": {
+      "status": "running",
+      "running": true
+    },
+    "network": "none",
+    "disks": "none",
+    "boot_screenshot": "multipla-siem-boot-bios.png",
+    "installer_screenshot": "multipla-siem-installer-bios.png"
+  },
+  {
+    "mode": "uefi",
+    "status": {
+      "status": "running",
+      "running": true
+    },
+    "network": "none",
+    "disks": "none",
+    "boot_screenshot": "multipla-siem-boot-uefi.png",
+    "installer_screenshot": "multipla-siem-installer-uefi.png"
+  }
+]

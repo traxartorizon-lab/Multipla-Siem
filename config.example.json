@@ -1,0 +1,37 @@
+{
+  "listen": "127.0.0.1:8080",
+  "syslog": "0.0.0.0:5514",
+  "public_url": "https://siem.example.com",
+  "data_dir": "./data",
+  "retention_days": 7,
+  "allowed_emails": [
+    "admin@gmail.com"
+  ],
+  "devices": [
+    {
+      "name": "Firewall principal",
+      "ip": "192.168.1.1",
+      "kind": "pfsense"
+    },
+    {
+      "name": "Proxmox principal",
+      "ip": "192.168.1.10",
+      "kind": "proxmox"
+    }
+  ],
+  "protected_cidrs": [
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16"
+  ],
+  "auto_block": false,
+  "block_minutes": 60,
+  "mail_to": "admin@gmail.com",
+  "mail_min_level": 10,
+  "feed_allowed_cidrs": [],
+  "tls_cert": "",
+  "tls_key": "",
+  "max_daily_mb": 256,
+  "local_analysis": true,
+  "snmp": "0.0.0.0:1162"
+}

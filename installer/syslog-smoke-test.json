@@ -1,0 +1,9 @@
+{
+  "tcp_received": true,
+  "tcp_revocation": true,
+  "udp_received": true,
+  "received_records": 31,
+  "ssh_alert": true,
+  "secrets_redacted": true,
+  "external_integrations_disabled": true
+}

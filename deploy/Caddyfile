@@ -1,0 +1,5 @@
+# Instale Caddy separadamente. Substitua domínio; DNS deve apontar para este servidor.
+siem.example.com {
+    # Não habilite access_log para o caminho /feeds/: o URL contém um segredo.
+    reverse_proxy 127.0.0.1:8080
+}
