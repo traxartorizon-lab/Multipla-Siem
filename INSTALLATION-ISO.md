@@ -1,4 +1,4 @@
-# Instalação — Multipla Siem 1.2.1
+# Instalação — Multipla Siem 1.2.2
 
 A ISO amd64 inclui Debian 13.7, o binário Multipla Siem e a configuração inicial. Não precisa baixar pacotes durante a instalação. É uma imagem personalizada, construída a partir da ISO oficial cuja assinatura e SHA512 foram verificados. Compare também a SHA256 da imagem entregue com o arquivo `.iso.sha256`.
 

@@ -1,6 +1,7 @@
 [Unit]
 Description=Multipla Siem - Security Information and Event Management
 After=network-online.target
+Before=getty@tty1.service
 Wants=network-online.target
 
 [Service]

@@ -1481,7 +1481,7 @@ func main() {
 	check := flag.Bool("check", false, "validar configuração e credenciais sem iniciar o servidor")
 	flag.Parse()
 	if *version {
-		fmt.Println("Multipla Siem 1.2.1")
+		fmt.Println("Multipla Siem 1.2.2")
 		return
 	}
 	if *firstBoot {

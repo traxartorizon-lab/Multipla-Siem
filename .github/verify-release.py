@@ -28,4 +28,7 @@ with tempfile.TemporaryDirectory() as directory:
         binary = Path('dist') / f'multipla-siem-linux-{arch}'
         assert binary.stat().st_size == manifest['size']
         assert hashlib.sha256(binary.read_bytes()).hexdigest() == manifest['sha256']
+        updater = Path('dist') / f'multipla-update-linux-{arch}'
+        assert updater.stat().st_size == manifest['updater_size']
+        assert hashlib.sha256(updater.read_bytes()).hexdigest() == manifest['updater_sha256']
 print('Signatures and reproducible release binaries verified.')

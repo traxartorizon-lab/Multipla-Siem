@@ -1,3 +1,10 @@
+# 1.2.2 — 2026-10-04
+
+- Codigo de cadastro reutiliza o segredo aleatorio gerado na instalacao, evitando divergencia com LoadCredential no primeiro start.
+- Checagem HTTPS usa a rota real de acesso /.
+- Atualizador instala tambem sua propria versao, com hash/tamanho incluidos no manifesto assinado.
+- Validacao SSH cria /run/sshd dentro do contexto in-target usado pelo instalador Debian.
+
 # 1.2.1 — 2026-10-04
 
 - Primeiro boot chamado pela partida do servidor, com nova tentativa automatica quando a rede fica disponivel.

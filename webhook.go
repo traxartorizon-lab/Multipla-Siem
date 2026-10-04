@@ -76,7 +76,7 @@ func webhookClient(approved string) *http.Client {
 }
 
 func webhookBody(event Event) []byte {
-	body, _ := json.Marshal(map[string]any{"product": "Multipla Siem", "version": "1.2.1", "id": event.ID, "time": event.Time, "device": redact(event.Device), "protocol": event.Protocol, "source_ip": event.SourceIP, "level": event.Level, "title": redact(event.Rule)})
+	body, _ := json.Marshal(map[string]any{"product": "Multipla Siem", "version": "1.2.2", "id": event.ID, "time": event.Time, "device": redact(event.Device), "protocol": event.Protocol, "source_ip": event.SourceIP, "level": event.Level, "title": redact(event.Rule)})
 	return body
 }
 

@@ -1,7 +1,7 @@
-Multipla Siem 1.2.1 corrige a partida automatica apos uma falha inicial de rede. O servidor passa a chamar o primeiro boot em sua propria sequencia de partida e tenta novamente quando necessario.
+Multipla Siem 1.2.2 corrige a inicialização automática, incluindo recuperação quando a rede demora a ficar disponível. O código exclusivo de cadastro do primeiro boot corresponde à credencial carregada pelo systemd, permitindo o primeiro acesso sem configuração manual adicional.
 
-A ISO instala SSH e configura os repositorios Debian oficiais sem depender do CD-ROM removido. Atualizacoes Debian sao tentadas durante a instalacao; sem conectividade, a base local permanece utilizavel. O instalador prepara o diretorio temporario necessario para validar o SSH. Os menus preservam a identidade Multipla Siem sem o texto instalacao offline.
+A ISO inclui SSH na porta 22 e configura repositórios Debian oficiais HTTPS. Tenta atualizações durante a instalação e continua com os pacotes locais quando não há internet. A validação do SSH ocorre dentro do ambiente de instalação correto. Os menus mantêm o fundo escurecido e removem o texto instalação offline.
 
-O atualizador manual multipla-update usa manifests assinados Ed25519, verifica arquitetura, versao, tamanho e SHA256, guarda copia do executavel/configuracao/estado e restaura a versao anterior se a partida ou o login HTTPS falhar. A chave privada permanece fora do GitHub. O canal atualiza o executavel e a interface nele embutida; nao instala migracoes arbitrarias de sistema.
+O comando multipla-update verifica assinaturas Ed25519, arquitetura, versão, tamanho e SHA256 do servidor e do próprio atualizador. Guarda cópias dos executáveis, configuração e estado; verifica a página real de acesso em HTTPS e restaura os arquivos anteriores se a partida falhar. A chave privada permanece fora do GitHub.
 
-Este release disponibiliza executaveis Linux amd64/arm64 e seus manifests/assinaturas. Instalacao nova pela ISO inclui o atualizador preconfigurado. Instalacoes anteriores precisam do pacote 1.2.1 para receber os novos arquivos de servico e o atualizador.
+Esta release contém executáveis amd64/arm64 e manifests assinados. A ISO nova inclui o canal pré-configurado. Instalações antigas precisam do pacote completo para receber também as correções dos serviços e do instalador.

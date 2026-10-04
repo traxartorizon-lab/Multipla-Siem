@@ -29,11 +29,15 @@ type settings struct {
 	PublicKey  string `json:"public_key"`
 }
 type manifest struct {
-	Version string `json:"version"`
-	Arch    string `json:"arch"`
-	SHA256  string `json:"sha256"`
-	Size    int64  `json:"size"`
+	Version       string `json:"version"`
+	Arch          string `json:"arch"`
+	SHA256        string `json:"sha256"`
+	Size          int64  `json:"size"`
+	UpdaterSHA256 string `json:"updater_sha256"`
+	UpdaterSize   int64  `json:"updater_size"`
 }
+
+const updaterVersion = "1.2.2"
 
 var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 var repoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
@@ -49,6 +53,10 @@ func verify(raw, signature []byte, key ed25519.PublicKey, arch string) (manifest
 	digest, err := hex.DecodeString(m.SHA256)
 	if err != nil || len(digest) != 32 || !versionPattern.MatchString(m.Version) || m.Arch != arch || m.Size < 1 || m.Size > 64<<20 {
 		return m, errors.New("manifesto invalido")
+	}
+	updaterDigest, err := hex.DecodeString(m.UpdaterSHA256)
+	if err != nil || len(updaterDigest) != 32 || m.UpdaterSize < 1 || m.UpdaterSize > 64<<20 {
+		return m, errors.New("manifesto do atualizador invalido")
 	}
 	return m, nil
 }
@@ -127,7 +135,7 @@ func healthy() error {
 		return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", port))
 	}
 	client := &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	response, err := client.Get(cfg.PublicURL + "/login")
+	response, err := client.Get(cfg.PublicURL + "/")
 	if err != nil {
 		return err
 	}
@@ -193,11 +201,32 @@ func update() error {
 	if int64(len(binary)) != m.Size || hex.EncodeToString(hash[:]) != strings.ToLower(m.SHA256) {
 		return errors.New("integridade do binario invalida")
 	}
+	updaterBinary, err := download(base+"download/v"+m.Version+"/multipla-update-linux-"+runtime.GOARCH, m.UpdaterSize)
+	if err != nil {
+		return err
+	}
+	updaterHash := sha256.Sum256(updaterBinary)
+	if int64(len(updaterBinary)) != m.UpdaterSize || hex.EncodeToString(updaterHash[:]) != strings.ToLower(m.UpdaterSHA256) {
+		return errors.New("integridade do atualizador invalida")
+	}
 	stage, err := os.MkdirTemp("/usr/local/bin", ".multipla-update-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(stage)
+	updaterStage, err := os.MkdirTemp("/usr/local/lib/multipla-siem", ".update-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(updaterStage)
+	nextUpdater := filepath.Join(updaterStage, "updater")
+	if err = os.WriteFile(nextUpdater, updaterBinary, 0755); err != nil {
+		return err
+	}
+	updaterReported, err := exec.Command(nextUpdater, "-version").Output()
+	if err != nil || strings.TrimSpace(string(updaterReported)) != "Multipla Siem Updater "+m.Version {
+		return errors.New("versao do atualizador nao corresponde ao manifesto")
+	}
 	next := filepath.Join(stage, "multipla-siem")
 	if err = os.WriteFile(next, binary, 0755); err != nil {
 		return err
@@ -222,6 +251,9 @@ func update() error {
 	if err = copyFile("/usr/local/bin/multipla-siem", filepath.Join(backup, "binary"), 0700); err != nil {
 		return err
 	}
+	if err = copyFile("/usr/local/lib/multipla-siem/updater", filepath.Join(backup, "updater"), 0700); err != nil {
+		return err
+	}
 	for _, name := range []string{"config.json", "state.json"} {
 		p := "/var/lib/multipla-siem/" + name
 		if _, e := os.Stat(p); e == nil {
@@ -230,36 +262,55 @@ func update() error {
 			}
 		}
 	}
-	rollback := func() {
-		_ = command("systemctl", "stop", "multipla-siem")
-		_ = copyFile(filepath.Join(backup, "binary"), "/usr/local/bin/multipla-siem", 0755)
-		for _, n := range []string{"config.json", "state.json"} {
-			if _, e := os.Stat(filepath.Join(backup, n)); e == nil {
-				_ = command("cp", "-p", filepath.Join(backup, n), "/var/lib/multipla-siem/"+n)
+	helperChanged := false
+	revert := func(cause error) error {
+		if e := command("systemctl", "stop", "multipla-siem"); e != nil {
+			return fmt.Errorf("%w; falha ao parar para retorno; backup %s", cause, backup)
+		}
+		if e := copyFile(filepath.Join(backup, "binary"), "/usr/local/bin/multipla-siem", 0755); e != nil {
+			return fmt.Errorf("%w; retorno do executavel falhou: %v; backup %s", cause, e, backup)
+		}
+		if helperChanged {
+			if e := copyFile(filepath.Join(backup, "updater"), "/usr/local/lib/multipla-siem/updater", 0755); e != nil {
+				return fmt.Errorf("%w; retorno do atualizador falhou: %v; backup %s", cause, e, backup)
 			}
 		}
+		for _, n := range []string{"config.json", "state.json"} {
+			if _, e := os.Stat(filepath.Join(backup, n)); e == nil {
+				if e = command("cp", "-p", filepath.Join(backup, n), "/var/lib/multipla-siem/"+n); e != nil {
+					return fmt.Errorf("%w; retorno da configuracao falhou: %v; backup %s", cause, e, backup)
+				}
+			}
+		}
+		return fmt.Errorf("%w; versao anterior restaurada; backup %s", cause, backup)
 	}
+
 	if err = os.Rename(next, "/usr/local/bin/multipla-siem"); err != nil {
 		return err
 	}
+	if err = os.Rename(nextUpdater, "/usr/local/lib/multipla-siem/updater"); err != nil {
+		return revert(err)
+	}
+	helperChanged = true
 	if err = command("systemctl", "start", "multipla-siem"); err != nil {
-		rollback()
-		return errors.New("falha na partida; versao anterior restaurada")
+		return revert(errors.New("falha na partida"))
 	}
 	time.Sleep(8 * time.Second)
 	if err = exec.Command("systemctl", "is-active", "--quiet", "multipla-siem").Run(); err != nil {
-		rollback()
-		return errors.New("servico falhou; versao anterior restaurada")
+		return revert(errors.New("servico falhou"))
 	}
 	if err = healthy(); err != nil {
-		rollback()
-		return fmt.Errorf("painel indisponivel; versao anterior restaurada: %w", err)
+		return revert(fmt.Errorf("painel indisponivel: %w", err))
 	}
 	installed = true
 	fmt.Println("Multipla Siem", m.Version, "instalada. Backup:", backup)
 	return nil
 }
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "-version" {
+		fmt.Println("Multipla Siem Updater", updaterVersion)
+		return
+	}
 	if err := update(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

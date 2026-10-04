@@ -14,7 +14,7 @@ import (
 
 func main() {
 	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "Uso: release-sign keygen ARQUIVO_PRIVADO | sign CHAVE VERSION ARCH BINARIO PASTA")
+		fmt.Fprintln(os.Stderr, "Uso: release-sign keygen ARQUIVO_PRIVADO | sign CHAVE VERSION ARCH BINARIO PASTA ATUALIZADOR")
 		os.Exit(1)
 	}
 	if e := run(os.Args[1:]); e != nil {
@@ -43,7 +43,7 @@ func run(a []string) error {
 		fmt.Println("Chave publica:", base64.StdEncoding.EncodeToString(pub))
 		return nil
 	}
-	if a[0] != "sign" || len(a) != 6 {
+	if a[0] != "sign" || len(a) != 7 {
 		return fmt.Errorf("argumentos invalidos")
 	}
 	key, e := os.ReadFile(a[1])
@@ -59,12 +59,19 @@ func run(a []string) error {
 		return e
 	}
 	h := sha256.Sum256(b)
+	updater, e := os.ReadFile(a[6])
+	if e != nil {
+		return e
+	}
+	uh := sha256.Sum256(updater)
 	m := struct {
-		Version string `json:"version"`
-		Arch    string `json:"arch"`
-		SHA256  string `json:"sha256"`
-		Size    int    `json:"size"`
-	}{a[2], a[3], hex.EncodeToString(h[:]), len(b)}
+		Version       string `json:"version"`
+		Arch          string `json:"arch"`
+		SHA256        string `json:"sha256"`
+		Size          int    `json:"size"`
+		UpdaterSHA256 string `json:"updater_sha256"`
+		UpdaterSize   int    `json:"updater_size"`
+	}{a[2], a[3], hex.EncodeToString(h[:]), len(b), hex.EncodeToString(uh[:]), len(updater)}
 	raw, e := json.Marshal(m)
 	if e != nil {
 		return e

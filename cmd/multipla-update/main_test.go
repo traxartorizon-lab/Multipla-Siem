@@ -8,7 +8,7 @@ import (
 
 func TestSignedManifest(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	raw := []byte(`{"version":"1.2.1","arch":"amd64","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":100}`)
+	raw := []byte(`{"version":"1.2.1","arch":"amd64","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":100,"updater_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","updater_size":100}`)
 	sig := ed25519.Sign(priv, raw)
 	if _, e := verify(raw, sig, pub, "amd64"); e != nil {
 		t.Fatal(e)

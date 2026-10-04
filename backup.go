@@ -108,7 +108,7 @@ func (a *App) backupDocument(email string) BackupDocument {
 	receivers.InboundEnabled = false
 	receivers.OutboundEnabled = false
 	receivers.SNMPEnabled = false
-	return BackupDocument{Receivers: &receivers, Product: "Multipla Siem", Schema: 1, Version: "1.2.1", Created: time.Now().UTC(), Owner: email, Config: BackupConfig{c.RetentionDays, c.AllowedEmails, c.Devices, c.Protected, c.BlockMinutes, c.MailTo, c.MailMinLevel, c.FeedAllowed, c.MaxDailyMB, c.LocalAnalysis}, Rules: a.state.Rules, Preferences: a.preferences(email)}
+	return BackupDocument{Receivers: &receivers, Product: "Multipla Siem", Schema: 1, Version: "1.2.2", Created: time.Now().UTC(), Owner: email, Config: BackupConfig{c.RetentionDays, c.AllowedEmails, c.Devices, c.Protected, c.BlockMinutes, c.MailTo, c.MailMinLevel, c.FeedAllowed, c.MaxDailyMB, c.LocalAnalysis}, Rules: a.state.Rules, Preferences: a.preferences(email)}
 }
 func decodeBackup(data []byte) (BackupDocument, error) {
 	var b BackupDocument

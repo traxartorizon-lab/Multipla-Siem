@@ -1,4 +1,4 @@
-# Multipla Siem 1.2.1
+# Multipla Siem 1.2.2
 
 Servidor leve em **Go**, interface em português, binário único sem dependências externas de execução. Instalação para Debian/Ubuntu com systemd. Recebe logs de pfSense, Proxmox e dispositivos syslog, correlaciona eventos, importa alertas reais do Wazuh, envia notificações pelo Gmail e publica respostas para um alias do pfSense.
 
@@ -161,4 +161,4 @@ A ISO 1.2 inicia HTTPS automaticamente. Use o código exclusivo exibido no conso
 
 UniFi/CEF com classificação de alertas, traps SNMPv2c/SNMPv3 authPriv e webhooks de entrada e saída. A página Syslog, SNMP e webhook separa as configurações. Consulte [Guia dos receptores](UNIFI-SNMP-WEBHOOK.md). A distribuição inclui GoSNMP v1.45.0 e seu código em vendor para compilação offline; a ISO usa binário pronto.
 
-Atualizacao de versoes e publicacao assinada: consulte [UPDATES.md](UPDATES.md). A ISO 1.2.1 inclui SSH e tenta atualizacoes Debian sem exigir conectividade para concluir a base local.
+Atualizacao de versoes e publicacao assinada: consulte [UPDATES.md](UPDATES.md). A ISO 1.2.2 inclui SSH e tenta atualizacoes Debian sem exigir conectividade para concluir a base local.

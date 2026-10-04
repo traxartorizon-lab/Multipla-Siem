@@ -97,12 +97,15 @@ func automaticFirstBoot() error {
 	if err = os.Chown(path, uid, gid); err != nil {
 		return err
 	}
-	if err = rotateBootstrapFile(credentialsPath()); err != nil {
-		return err
-	}
+	// systemd has already captured LoadCredential before ExecStartPre runs.
+	// Reuse the unique token generated during installation so the console and
+	// the running service use the same credential on the very first start.
 	values, err := readCredentialValues(credentialsPath())
 	if err != nil {
 		return err
+	}
+	if len(values["BOOTSTRAP_TOKEN"]) < 32 {
+		return errors.New("codigo inicial ausente ou curto; verifique a instalacao das credenciais")
 	}
 	banner := fmt.Sprintf("\nMULTIPLA SIEM — Primeiro acesso\nPainel: %s\nCódigo exclusivo: %s\nCertificado SHA256: %s\nAbra o painel e cadastre sua conta administrativa.\n", cfg.PublicURL, values["BOOTSTRAP_TOKEN"], fingerprint)
 	if err = os.WriteFile("/etc/issue", []byte(banner), 0600); err != nil {

@@ -33,6 +33,7 @@ jobs:
           mkdir -p dist
           for arch in amd64 arm64; do
             GOOS=linux GOARCH="$arch" go build -mod=vendor -buildvcs=false -trimpath -ldflags '-s -w' -o "dist/multipla-siem-linux-$arch" .
+            GOOS=linux GOARCH="$arch" go build -mod=vendor -buildvcs=false -trimpath -ldflags '-s -w' -o "dist/multipla-update-linux-$arch" ./cmd/multipla-update
           done
       - name: Verify signatures and exact binary hashes
         run: python3 .github/verify-release.py
@@ -41,4 +42,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           version=$(python3 -c "import json; print(json.load(open('release/manifest-amd64.json'))['version'])")
-          gh release create "v$version" --target "$GITHUB_SHA" --title "Multipla Siem $version" --notes-file RELEASE-NOTES.md --latest dist/multipla-siem-linux-amd64 dist/multipla-siem-linux-arm64 release/manifest-amd64.json release/manifest-amd64.sig release/manifest-arm64.json release/manifest-arm64.sig
+          gh release create "v$version" --target "$GITHUB_SHA" --title "Multipla Siem $version" --notes-file RELEASE-NOTES.md --latest dist/multipla-siem-linux-amd64 dist/multipla-siem-linux-arm64 dist/multipla-update-linux-amd64 dist/multipla-update-linux-arm64 release/manifest-amd64.json release/manifest-amd64.sig release/manifest-arm64.json release/manifest-arm64.sig
