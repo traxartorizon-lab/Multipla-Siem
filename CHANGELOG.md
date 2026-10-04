@@ -1,3 +1,7 @@
+# 1.2.3
+
+Corrige Referrer-Policy dos formularios de acesso; preserva bloqueio de origem nula/externa.
+
 # 1.2.2 — 2026-10-04
 
 - Codigo de cadastro reutiliza o segredo aleatorio gerado na instalacao, evitando divergencia com LoadCredential no primeiro start.

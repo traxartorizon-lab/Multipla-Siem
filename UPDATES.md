@@ -1,4 +1,4 @@
-# Multipla Siem 1.2.2 — instalação e atualização
+# Multipla Siem 1.2.3 — instalação e atualização
 
 O instalador inclui SSH e instala primeiro os pacotes locais. Depois tenta atualizar o Debian pelos repositórios oficiais HTTPS, validando as assinaturas APT. Sem conectividade, continua com os pacotes da ISO. Falhas ficam em /var/log/multipla-install-updates.log. Não há download de nova versão do SIEM durante a instalação: o SIEM incluído é o desta imagem.
 
@@ -19,10 +19,10 @@ Substitua CAMINHO-PRIVADO por uma pasta privada existente fora do projeto. Guard
 Para cada arquitetura, assine o executável da versão desejada, por exemplo:
 
 ```powershell
-.\dist\release-sign-windows-amd64.exe sign C:\CAMINHO-PRIVADO\multipla-signing.key 1.2.2 amd64 .\dist\multipla-siem-linux-amd64 .\release .\dist\multipla-update-linux-amd64
+.\dist\release-sign-windows-amd64.exe sign C:\CAMINHO-PRIVADO\multipla-signing.key 1.2.3 amd64 .\dist\multipla-siem-linux-amd64 .\release .\dist\multipla-update-linux-amd64
 ```
 
-Crie uma GitHub Release com tag v1.2.2 e anexe multipla-siem-linux-amd64, multipla-update-linux-amd64, manifest-amd64.json e manifest-amd64.sig. Repita para arm64 se necessário. Marque a release estável como Latest. As versões futuras usam o mesmo formato e a mesma chave. A chave pública não deve ser obtida de um download não autenticado durante a atualização.
+Crie uma GitHub Release com tag v1.2.3 e anexe multipla-siem-linux-amd64, multipla-update-linux-amd64, manifest-amd64.json e manifest-amd64.sig. Repita para arm64 se necessário. Marque a release estável como Latest. As versões futuras usam o mesmo formato e a mesma chave. A chave pública não deve ser obtida de um download não autenticado durante a atualização.
 
 ## Configurar uma vez no servidor
 
@@ -32,7 +32,7 @@ Como root, crie /etc/multipla-siem/update.json:
 {"repository":"traxartorizon-lab/Multipla-Siem","public_key":"sAMAsxkPlps6yyq2RHPRWpXfqDeCzA6n/58Z28ShzvI="}
 ```
 
-Proteja o arquivo com chmod 600. Na ISO 1.2.2 essa configuração já vem instalada. Basta executar:
+Proteja o arquivo com chmod 600. Na ISO 1.2.3 essa configuração já vem instalada. Basta executar:
 
 ```sh
 su -

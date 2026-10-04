@@ -72,3 +72,8 @@ Webhook de saída exige HTTPS, valida certificados, recusa proxy automático e r
 ## Validação da versão 1.2.2
 
 70 testes Go e go vet passaram. A instalação Debian completa foi exercitada sem placa de rede em QEMU; o fluxo de instalação corrigido foi concluído. No sistema instalado, o payload 1.2.2 foi validado com SSH ativo, fontes APT oficiais, HTTPS com certificado local validado e recuperação automática após atraso de rede. O código de primeiro acesso foi aceito e permitiu consultar a API autenticada, confirmando a correspondência da credencial systemd. Não foram realizados testes com credenciais Google reais ou equipamentos físicos UniFi/pfSense. A verificação de partida do atualizador não substitui a validação funcional após atualização.
+
+
+## 1.2.3
+
+Referrer-Policy same-origin preserva a origem de formularios locais, sem enviar Referer a sites externos. Verificacao estrita de Origin e CSRF mantida. Teste de regressao cobre origem correta, ausente, null e externa no cadastro e login. Cadastro por navegador exercitado em demonstracao local; persistencia de conta e senha correta/incorreta cobertas por testes Go. Erros de login exibidos como texto na propria tela, sem HTML injetado.
