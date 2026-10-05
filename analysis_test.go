@@ -102,19 +102,16 @@ func TestAnalysisMemoryLimitsAndNoCommands(t *testing.T) {
 		t.Fatal("expired state retained")
 	}
 }
-func TestAnalysisDisabledAndNoFirewallAction(t *testing.T) {
+func TestAnalysisAlwaysActiveAndNoFirewallAction(t *testing.T) {
 	a := testApp(t)
-	a.analyzeEvent(analysisFixture(time.Now(), "kernel panic", "198.51.100.8"))
-	if a.analyzer != nil {
-		t.Fatal("disabled analysis ran")
-	}
-	a.cfg.LocalAnalysis = true
+	a.cfg.LocalAnalysis = false
 	a.cfg.AutoBlock = true
 	a.analyzeEvent(analysisFixture(time.Now(), "kernel panic", "198.51.100.8"))
-	if len(a.events) != 1 || len(a.state.Blocks) != 0 {
-		t.Fatal("analysis executed firewall response")
+	if !a.analysisSnapshot().Enabled || len(a.events) != 1 || len(a.state.Blocks) != 0 || a.events[0].Diagnosis == nil {
+		t.Fatal("continuous diagnosis missing or firewall modified")
 	}
 }
+
 func TestAnalysisDiskFailureDoesNotNotify(t *testing.T) {
 	a := testApp(t)
 	a.cfg.LocalAnalysis = true
@@ -124,4 +121,3 @@ func TestAnalysisDiskFailureDoesNotNotify(t *testing.T) {
 		t.Fatal("notified despite storage failure")
 	}
 }
-

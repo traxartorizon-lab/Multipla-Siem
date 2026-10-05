@@ -1,5 +1,6 @@
 'use strict';
 async function renderBackups(){
+ $('#full-backup-command').textContent='/usr/local/bin/multipla-siem -full-backup -backup-drive '+shellQuoteBackupEmail(snapshot.email)+'\n\nAgendar diariamente:\n/usr/local/bin/multipla-siem -full-backup-schedule '+shellQuoteBackupEmail(snapshot.email);
  const p=snapshot.preferences,f=$('#preferences-form');
  if(!f.contains(document.activeElement)){
   ['default_page','refresh_seconds','alert_min_level','backup_time','backup_timezone'].forEach(k=>f.elements[k].value=p[k]);
@@ -35,3 +36,5 @@ $('#drive-list').onclick=()=>run(async()=>{
   b.name,date(b.createdTime),action('Restaurar',async()=>{if(confirmRestore())await api('/api/drive/backups/'+encodeURIComponent(b.id)+'/restore','POST',{})})
  ]));
 });
+
+function shellQuoteBackupEmail(email){return "'"+String(email).replaceAll("'","'\\''")+"'";}

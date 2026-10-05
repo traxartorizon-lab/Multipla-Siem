@@ -51,6 +51,13 @@ func (a *App) registerLocalAuth(mux *http.ServeMux) {
 		}
 		a.mu.Lock()
 		admin := a.state.LocalAdmin
+		loginEmail := strings.ToLower(strings.TrimSpace(r.FormValue("email")))
+		if account, exists := a.state.Accounts[loginEmail]; exists {
+			admin = LocalAdmin{Email: loginEmail, Salt: account.Salt, Hash: account.Hash}
+			if account.Disabled {
+				admin.Hash = ""
+			}
+		}
 		a.mu.Unlock()
 		salt := admin.Salt
 		if salt == "" {

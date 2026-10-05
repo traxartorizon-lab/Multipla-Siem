@@ -116,27 +116,29 @@ func (l *localAnalyzer) observe(e Event) []Event {
 	if e.Alert {
 		return nil
 	}
+	var alerts []Event
+	if criticalEvent(e) {
+		alert := analysisAlert(e, "Evento crítico analisado localmente", "Indicador crítico detectado; consulte o diagnóstico local.", "local-critical", 12)
+		alert.ParentID = e.ID
+		alerts = append(alerts, alert)
+	}
 	m := l.Devices[e.Device]
 	if m == nil {
 		if len(l.Devices) >= analysisDeviceLimit {
 			l.Dropped++
-			return nil
+			return alerts
 		}
 		m = &analysisMinute{}
 		l.Devices[e.Device] = m
 	}
 	m.advance(e.Time)
 	m.LastSeen = e.Time
-	var alerts []Event
 	emit := func(slot int, name, reason, detector string, level int) {
 		if !m.Last[slot].IsZero() && e.Time.Sub(m.Last[slot]) < 10*time.Minute {
 			return
 		}
 		m.Last[slot] = e.Time
 		alerts = append(alerts, analysisAlert(e, name, reason, detector, level))
-	}
-	if analysisCritical.MatchString(e.Message) {
-		emit(3, "Falha crítica de sistema ou hardware", "O log contém um indicador explícito de falha crítica; confirme o componente e investigue os eventos próximos.", "local-critical", 12)
 	}
 	key := e.Device + "|" + e.SourceIP
 	if e.SourceIP != "" {
@@ -195,7 +197,7 @@ func (l *localAnalyzer) maintain(now time.Time, devices []Device) {
 	}
 }
 func (a *App) analysisSnapshot() analysisStatus {
-	s := analysisStatus{Enabled: a.cfg.LocalAnalysis, Mode: "Estatística adaptativa local · somente alertas", WarmupMinutes: analysisWarmup, DeviceLimit: analysisDeviceLimit, SourceLimit: analysisSourceLimit}
+	s := analysisStatus{Enabled: true, Mode: "Análise contínua local · estatística e diagnósticos", WarmupMinutes: analysisWarmup, DeviceLimit: analysisDeviceLimit, SourceLimit: analysisSourceLimit}
 	if a.analyzer != nil {
 		s.Devices = len(a.analyzer.Devices)
 		s.Skipped = a.analyzer.Dropped
@@ -208,9 +210,6 @@ func (a *App) analysisSnapshot() analysisStatus {
 	return s
 }
 func (a *App) analyzeEvent(e Event) {
-	if !a.cfg.LocalAnalysis {
-		return
-	}
 	if a.analyzer == nil {
 		a.analyzer = newLocalAnalyzer()
 	}

@@ -58,7 +58,7 @@ def brand_initrd(data):
     return data + gzip.compress(overlay, compresslevel=9, mtime=0)
 
 def package(root):
-    files = ['update.example.json', 'scripts/multipla-update', 'dist/multipla-update-linux-amd64', 'UPDATES.md', 'scripts/install-updates.sh', 'config.example.json', 'deploy/multipla-siem.service', 'deploy/multipla-firstboot.service', 'scripts/install.sh', 'scripts/multipla-setup', 'scripts/verify-installation.sh', 'dist/multipla-siem-linux-amd64', 'README.md', 'VERSION', 'CHANGELOG.md', 'INSTALLATION-ISO.md', 'SECURITY-REVIEW.md', 'BACKUP-DRIVE.md', 'UNIFI-SNMP-WEBHOOK.md', 'THIRD-PARTY-NOTICES.md', 'integrations/custom-multipla-siem', 'integrations/wazuh.xml', 'deploy/proxmox-rsyslog.conf']
+    files = ['update.example.json', 'scripts/multipla-update', 'dist/multipla-update-linux-amd64', 'UPDATES.md', 'FULL-BACKUP.md', 'LOCAL-AI.md', 'scripts/install-updates.sh', 'config.example.json', 'deploy/multipla-siem.service', 'deploy/multipla-firstboot.service', 'scripts/install.sh', 'scripts/multipla-setup', 'scripts/verify-installation.sh', 'dist/multipla-siem-linux-amd64', 'README.md', 'VERSION', 'CHANGELOG.md', 'INSTALLATION-ISO.md', 'SECURITY-REVIEW.md', 'BACKUP-DRIVE.md', 'UNIFI-SNMP-WEBHOOK.md', 'THIRD-PARTY-NOTICES.md', 'integrations/custom-multipla-siem', 'integrations/wazuh.xml', 'deploy/proxmox-rsyslog.conf']
     for path in files:
         if not (root/path).is_file():
             raise ValueError('Missing payload file: '+path)

@@ -1,3 +1,23 @@
+# 1.2.5 — 2026-10-05
+
+Multipla Siem 1.2.5 adiciona recuperação completa criptografada e contas com perfis de acesso.
+
+- Backup completo AES-256-GCM em blocos autenticados, compressão e processamento em fluxo para limitar memória. Inclui dados e logs do SIEM, contas e hashes de senha, credenciais de integrações, certificados, identidade Tailscale e binários. Não é uma imagem do Debian e não inclui backups anteriores.
+- Chave aleatória de recuperação de 256 bits separada, em /root/multipla-siem-recovery.key. Nunca é enviada ao Drive. É indispensável guardar uma cópia fora do servidor.
+- Envio ao Drive da conta administrativa já autorizada, com validação do destino HTTPS, tamanho e checksum do envio. Falha de rede preserva a cópia local.
+- Agendamento diário por systemd, com horário e fuso das preferências. Exige ativação uma vez como root.
+- Restauração valida autenticação, conteúdo, caminhos e limites antes de alterar a instalação; cria checkpoint criptografado. Exige servidor original desligado, evitando duplicar a identidade Tailscale.
+- Análise local permanente, diagnóstico imediato dos logs críticos e integração opcional com modelo Ollama instalado no servidor. A disponibilidade do modelo aparece separadamente no painel.
+- Edição do acompanhamento de alertas (título, prioridade, situação e notas), preservando o evento original; edição das regras existentes.
+- Contagem de dispositivos online e offline pelo estado Tailscale, com identificação explícita do fallback por atividade de logs.
+- Cadastro e edição de contas administrativas ou somente visualização, login local opcional e desativação de acesso. A conta administrativa principal é protegida.
+- Perfil de visualização é limitado no servidor: não altera configurações, acessa backups/credenciais nem executa respostas. Mudanças de conta encerram sessões anteriores.
+
+A atualização preserva o login Google, o domínio Tailscale e os cadastros existentes. Credenciais revogadas ou expiradas por provedores externos ainda exigem reconexão. A integração unificada para enviar Gmail por OAuth ainda não está incluída.
+
+Consulte FULL-BACKUP.md para os comandos de criação, agendamento e restauração. Os backups completos .msbk são independentes dos backups simples JSON do painel. Não devem ser importados como JSON. Não há remoção automática de cópias completas; monitore o espaço local e no Drive.
+
+
 # 1.2.4 — 2026-10-05
 
 - Gráfico de eventos por dispositivo, com alertas críticos destacados (nível 12 a 15).

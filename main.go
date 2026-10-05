@@ -21,8 +21,10 @@ import (
 	"net/smtp"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -70,19 +72,23 @@ type Rule struct {
 	Enabled   bool   `json:"enabled"`
 }
 type Event struct {
-	Protocol string    `json:"protocol,omitempty"`
-	SenderIP string    `json:"sender_ip,omitempty"`
-	CEF      *CEFEvent `json:"cef,omitempty"`
-	Detector string    `json:"detector,omitempty"`
-	ID       string    `json:"id"`
-	Time     time.Time `json:"time"`
-	Device   string    `json:"device"`
-	Kind     string    `json:"kind"`
-	SourceIP string    `json:"source_ip"`
-	Message  string    `json:"message"`
-	Level    int       `json:"level"`
-	Rule     string    `json:"rule"`
-	Alert    bool      `json:"alert"`
+	ParentID       string          `json:"parent_id,omitempty"`
+	Diagnosis      *Diagnosis      `json:"diagnosis,omitempty"`
+	Review         *AlertReview    `json:"review,omitempty"`
+	ModelDiagnosis *ModelDiagnosis `json:"model_diagnosis,omitempty"`
+	Protocol       string          `json:"protocol,omitempty"`
+	SenderIP       string          `json:"sender_ip,omitempty"`
+	CEF            *CEFEvent       `json:"cef,omitempty"`
+	Detector       string          `json:"detector,omitempty"`
+	ID             string          `json:"id"`
+	Time           time.Time       `json:"time"`
+	Device         string          `json:"device"`
+	Kind           string          `json:"kind"`
+	SourceIP       string          `json:"source_ip"`
+	Message        string          `json:"message"`
+	Level          int             `json:"level"`
+	Rule           string          `json:"rule"`
+	Alert          bool            `json:"alert"`
 }
 type Block struct {
 	IP      string    `json:"ip"`
@@ -96,18 +102,22 @@ type Audit struct {
 	Action string    `json:"action"`
 }
 type State struct {
-	Receivers       ReceiverSettings        `json:"receivers"`
-	SNMPClocks      map[string]SNMPClock    `json:"snmp_clocks,omitempty"`
-	GoogleSettings  string                  `json:"google_settings_encrypted,omitempty"`
-	LocalAdmin      LocalAdmin              `json:"local_admin,omitempty"`
-	GoogleSubjects  map[string]string       `json:"google_subjects,omitempty"`
-	Preferences     map[string]Preferences  `json:"preferences,omitempty"`
-	BackupStatus    map[string]BackupStatus `json:"backup_status,omitempty"`
-	DriveTokens     map[string]string       `json:"drive_tokens_encrypted,omitempty"`
-	Rules           []Rule                  `json:"rules"`
-	Blocks          map[string]Block        `json:"blocks"`
-	Audit           []Audit                 `json:"audit"`
-	BootstrapDigest string                  `json:"bootstrap_digest,omitempty"`
+	AlertReviews    map[string]AlertReview    `json:"alert_reviews,omitempty"`
+	LocalAIModel    string                    `json:"local_ai_model,omitempty"`
+	ModelDiagnoses  map[string]ModelDiagnosis `json:"model_diagnoses,omitempty"`
+	Accounts        map[string]AccessAccount  `json:"accounts,omitempty"`
+	Receivers       ReceiverSettings          `json:"receivers"`
+	SNMPClocks      map[string]SNMPClock      `json:"snmp_clocks,omitempty"`
+	GoogleSettings  string                    `json:"google_settings_encrypted,omitempty"`
+	LocalAdmin      LocalAdmin                `json:"local_admin,omitempty"`
+	GoogleSubjects  map[string]string         `json:"google_subjects,omitempty"`
+	Preferences     map[string]Preferences    `json:"preferences,omitempty"`
+	BackupStatus    map[string]BackupStatus   `json:"backup_status,omitempty"`
+	DriveTokens     map[string]string         `json:"drive_tokens_encrypted,omitempty"`
+	Rules           []Rule                    `json:"rules"`
+	Blocks          map[string]Block          `json:"blocks"`
+	Audit           []Audit                   `json:"audit"`
+	BootstrapDigest string                    `json:"bootstrap_digest,omitempty"`
 }
 type Session struct {
 	Subject string
@@ -126,41 +136,45 @@ type bucket struct {
 	Last  time.Time
 }
 type App struct {
-	snmpMu        sync.Mutex
-	snmpDecoders  map[string]snmpDecoder
-	snmpSeen      map[string]time.Time
-	protocolSeen  map[string]time.Time
-	webhookQ      chan Event
-	webhookStatus string
-	snmpStatus    string
-	backupMu      sync.Mutex
-	driveMu       sync.Mutex
-	analyzer      *localAnalyzer
-	mu            sync.Mutex
-	cfg           Config
-	state         State
-	events        []Event
-	sessions      map[string]Session
-	oauth         map[string]OAuth
-	counters      map[string]bucket
-	seen          map[string]time.Time
-	lastSeen      map[string]time.Time
-	total         int64
-	totalDay      string
-	dropped       int64
-	storageError  string
-	mailStatus    string
-	feedSeen      time.Time
-	demo          bool
-	mailQ         chan Event
-	configPath    string
-	origin        string
-	rates         map[string]rateWindow
-	active        map[string]time.Time
-	bootAt        time.Time
-	bootstrapUsed bool
-	nativeTLS     bool
-	localIPs      map[netip.Addr]bool
+	aiQueue        chan Event
+	aiPending      map[string]bool
+	aiStatus       localAIStatus
+	snmpMu         sync.Mutex
+	snmpDecoders   map[string]snmpDecoder
+	snmpSeen       map[string]time.Time
+	protocolSeen   map[string]time.Time
+	webhookQ       chan Event
+	webhookStatus  string
+	snmpStatus     string
+	backupMu       sync.Mutex
+	driveMu        sync.Mutex
+	analyzer       *localAnalyzer
+	mu             sync.Mutex
+	cfg            Config
+	state          State
+	events         []Event
+	sessions       map[string]Session
+	oauth          map[string]OAuth
+	counters       map[string]bucket
+	seen           map[string]time.Time
+	lastSeen       map[string]time.Time
+	devicePresence map[string]bool
+	total          int64
+	totalDay       string
+	dropped        int64
+	storageError   string
+	mailStatus     string
+	feedSeen       time.Time
+	demo           bool
+	mailQ          chan Event
+	configPath     string
+	origin         string
+	rates          map[string]rateWindow
+	active         map[string]time.Time
+	bootAt         time.Time
+	bootstrapUsed  bool
+	nativeTLS      bool
+	localIPs       map[netip.Addr]bool
 }
 
 var client = &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(r *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
@@ -264,6 +278,7 @@ func atomicJSON(path string, v any) error {
 	return os.Rename(tmp, path)
 }
 func newApp(c Config, path string, demo bool) (*App, error) {
+	c.LocalAnalysis = true
 	if e := validateConfig(c); e != nil {
 		return nil, e
 	}
@@ -272,6 +287,9 @@ func newApp(c Config, path string, demo bool) (*App, error) {
 	}
 	a := &App{cfg: c, configPath: path, origin: c.PublicURL, demo: demo, state: State{Rules: defaults(), Blocks: map[string]Block{}}, sessions: map[string]Session{}, oauth: map[string]OAuth{}, counters: map[string]bucket{}, seen: map[string]time.Time{}, lastSeen: map[string]time.Time{}, mailQ: make(chan Event, 64)}
 	a.rates = map[string]rateWindow{}
+	a.aiQueue = make(chan Event, 64)
+	a.aiPending = map[string]bool{}
+	a.analyzer = newLocalAnalyzer()
 	a.webhookQ = make(chan Event, 64)
 	a.protocolSeen = map[string]time.Time{}
 	a.active = map[string]time.Time{}
@@ -403,6 +421,7 @@ func (a *App) audit(actor, action string) {
 }
 func (a *App) appendEvent(e Event) bool {
 	e = sanitizeEvent(e)
+	e.Diagnosis = localDiagnosis(e)
 	encoded, err := json.Marshal(e)
 	if err != nil {
 		a.storageError = "Falha de serialização"
@@ -439,6 +458,7 @@ func (a *App) appendEvent(e Event) bool {
 	}
 	a.storageError = ""
 	a.remember(e)
+	a.enqueueLocalAI(e)
 	a.queueWebhook(e)
 	return true
 }
@@ -569,6 +589,7 @@ func (a *App) ingest(d Device, raw string) {
 		if (known || len(a.protocolSeen) < 1024) && (previous.IsZero() || now.Sub(previous) >= 30*time.Second) {
 			alert := ev
 			alert.ID = token()
+			alert.ParentID = ev.ID
 			alert.Alert = true
 			alert.Rule = title
 			alert.Level = level
@@ -618,6 +639,7 @@ func (a *App) evaluateRules(ev Event, raw string, d Device) {
 			b.Last = now
 			alert := ev
 			alert.ID = token()
+			alert.ParentID = ev.ID
 			alert.Alert = true
 			alert.Rule = r.Name
 			alert.Level = r.Level
@@ -899,7 +921,7 @@ func (a *App) session(r *http.Request) (Session, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	s, ok := a.sessions[value]
-	if !ok || !time.Now().Before(s.Expires) {
+	if !ok || !time.Now().Before(s.Expires) || a.roleLocked(s.Email) == "disabled" {
 		return Session{}, false
 	}
 	if last := a.active[value]; !last.IsZero() && time.Since(last) > 15*time.Minute {
@@ -975,6 +997,14 @@ func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
 		s, ok := a.session(r)
 		if !ok {
 			http.Error(w, "Entre para continuar", 401)
+			return
+		}
+		a.mu.Lock()
+		role := a.roleLocked(s.Email)
+
+		a.mu.Unlock()
+		if role != "admin" && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export")) {
+			http.Error(w, "Perfil somente visualizacao: operacao nao permitida", 403)
 			return
 		}
 		if r.Method != "GET" {
@@ -1093,6 +1123,9 @@ func (a *App) oauthCallback(w http.ResponseWriter, r *http.Request) {
 }
 func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
+	a.registerAccountRoutes(mux)
+	a.registerAlertRoutes(mux)
+	a.registerLocalAIRoutes(mux)
 	a.registerBackupRoutes(mux)
 	a.registerLocalAuth(mux)
 	a.registerGoogleSettings(mux)
@@ -1110,10 +1143,10 @@ func (a *App) routes() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(b)
 	})
-	for _, path := range []string{"style.css", "app.js", "backup.js", "login.js", "receivers.js"} {
+	for _, path := range []string{"style.css", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js"} {
 		p := path
 		mux.HandleFunc("GET /"+p, func(w http.ResponseWriter, r *http.Request) {
-			if p == "app.js" || p == "backup.js" || p == "login.js" || p == "receivers.js" {
+			if p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" {
 				w.Header().Set("Content-Type", "text/javascript")
 			} else {
 				w.Header().Set("Content-Type", "text/css")
@@ -1197,6 +1230,17 @@ func (a *App) routes() http.Handler {
 		bins := make([]int, 30)
 		for i := len(a.events) - 1; i >= 0; i-- {
 			e := a.events[i]
+			if review, ok := a.state.AlertReviews[e.ID]; ok {
+				copy := review
+				e.Review = &copy
+			}
+			if result, ok := a.state.ModelDiagnoses[diagnosisKey(e)]; ok {
+				copy := result
+				e.ModelDiagnosis = &copy
+			}
+			if e.Diagnosis == nil {
+				e.Diagnosis = localDiagnosis(e)
+			}
 			minute := int(time.Since(e.Time) / time.Minute)
 			if (!e.Alert || e.Kind == "wazuh") && minute >= 0 && minute < 30 {
 				bins[29-minute]++
@@ -1223,7 +1267,22 @@ func (a *App) routes() http.Handler {
 		for _, source := range a.state.Receivers.Sources {
 			snmpDevices = append(snmpDevices, snmpDevice(source))
 		}
-		writeJSON(w, map[string]any{"snmp_devices": snmpDevices, "preferences": a.preferences(s.Email), "drive_connected": a.state.DriveTokens[strings.ToLower(s.Email)] != "", "analysis": a.analysisSnapshot(), "events": evs, "alerts": alerts, "total": total, "bins": bins, "blocks": blocks, "config": a.cfg, "rules": a.state.Rules, "audit": a.state.Audit, "last_seen": a.lastSeen, "mail_status": a.mailStatus, "storage_error": a.storageError, "dropped": a.dropped, "feed_seen": a.feedSeen, "email": s.Email, "csrf": s.CSRF, "demo": a.demo, "local_account_ready": a.state.LocalAdmin.Hash != "", "google_ready": a.state.GoogleSettings != "" || secret("GOOGLE_CLIENT_ID") != "", "mail_ready": secret("GMAIL_APP_PASSWORD") != ""})
+		role := a.roleLocked(s.Email)
+		visiblePresence := map[string]bool{}
+		for _, device := range append(append([]Device{}, a.cfg.Devices...), snmpDevices...) {
+			if online, ok := a.devicePresence[device.IP]; ok {
+				visiblePresence[device.IP] = online
+			}
+		}
+		visibleConfig := a.cfg
+		visibleAudit := a.state.Audit
+		if role != "admin" {
+			visibleConfig.AllowedEmails = []string{s.Email}
+			visibleConfig.FeedAllowed = nil
+			visibleConfig.MailTo = ""
+			visibleAudit = nil
+		}
+		writeJSON(w, map[string]any{"role": role, "snmp_devices": snmpDevices, "preferences": a.preferences(s.Email), "drive_connected": a.state.DriveTokens[strings.ToLower(s.Email)] != "", "analysis": a.analysisSnapshot(), "local_ai": a.localAISnapshot(), "events": evs, "alerts": alerts, "total": total, "bins": bins, "blocks": blocks, "config": visibleConfig, "rules": a.state.Rules, "audit": visibleAudit, "last_seen": a.lastSeen, "device_presence": visiblePresence, "mail_status": a.mailStatus, "storage_error": a.storageError, "dropped": a.dropped, "feed_seen": a.feedSeen, "email": s.Email, "csrf": s.CSRF, "demo": a.demo, "local_account_ready": a.state.LocalAdmin.Hash != "", "google_ready": a.state.GoogleSettings != "" || secret("GOOGLE_CLIENT_ID") != "", "mail_ready": secret("GMAIL_APP_PASSWORD") != ""})
 	}))
 	mux.HandleFunc("PUT /api/config", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		var c Config
@@ -1244,6 +1303,7 @@ func (a *App) routes() http.Handler {
 		c.PublicURL = a.cfg.PublicURL
 		c.TLSCert = a.cfg.TLSCert
 		c.TLSKey = a.cfg.TLSKey
+		c.LocalAnalysis = true
 		if a.demo && c.AutoBlock {
 			http.Error(w, "Demo permite apenas simulação", 400)
 			return
@@ -1545,9 +1605,44 @@ func main() {
 	setup := flag.Bool("setup", false, "configuração guiada da instalação Linux")
 	version := flag.Bool("version", false, "mostrar versão")
 	check := flag.Bool("check", false, "validar configuração e credenciais sem iniciar o servidor")
+	fullBackup := flag.Bool("full-backup", false, "backup completo criptografado como root")
+	fullRestore := flag.String("full-restore", "", "arquivo de recuperacao completo")
+	recoveryFile := flag.String("recovery-key", "", "arquivo privado com a chave de recuperacao")
+	backupDrive := flag.String("backup-drive", "", "email Google ja autorizado para receber backup completo")
+	replaceServer := flag.Bool("replace-server", false, "confirmar que o servidor original esta desligado")
+	fullSchedule := flag.String("full-backup-schedule", "", "agendar backup completo diario para uma conta Drive")
+	fullLocked := flag.Bool("full-locked", false, "trava interna do backup completo")
 	flag.Parse()
+	if *fullBackup || *fullRestore != "" || *fullSchedule != "" {
+		if runtime.GOOS != "linux" || os.Geteuid() != 0 {
+			log.Fatal("backup completo exige root no Debian/Ubuntu")
+		}
+		if !*fullLocked {
+			executable, err := os.Executable()
+			if err != nil {
+				log.Fatal(err)
+			}
+			args := append([]string{"-n", "/run/multipla-update.lock", "flock", "-n", "/run/multipla-updater-operation.lock", executable, "-full-locked"}, os.Args[1:]...)
+			cmd := exec.Command("flock", args...)
+			cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+			if err := cmd.Run(); err != nil {
+				os.Exit(1)
+			}
+			return
+		}
+		if *fullSchedule != "" {
+			if err := installFullBackupSchedule(*fullSchedule); err != nil {
+				log.Fatal(err)
+			}
+			return
+		}
+		if err := runFullBackup(*fullRestore, *backupDrive, *recoveryFile, *replaceServer); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if *version {
-		fmt.Println("Multipla Siem 1.2.4")
+		fmt.Println("Multipla Siem 1.2.5")
 		return
 	}
 	if *firstBoot {
@@ -1606,6 +1701,8 @@ func main() {
 		log.Fatal(e)
 	}
 	go a.maintenance()
+	go a.localAIWorker()
+	go a.devicePresenceWorker()
 	go a.backupScheduler()
 	go a.mailWorker()
 	go a.webhookWorker()

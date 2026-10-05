@@ -11,3 +11,7 @@ dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);bo
 .rule-example-toolbar{display:flex;align-items:end;gap:12px;margin:18px 0}.rule-example-toolbar label{flex:1;max-width:420px}.rule-event-preview{white-space:pre-wrap;overflow-wrap:anywhere;max-height:160px;overflow:auto;background:#0b131d;padding:16px;border:1px solid var(--line);border-radius:8px;font-size:12px;margin-bottom:18px}@media(max-width:720px){.rule-example-toolbar{align-items:stretch;flex-direction:column}}
 
 .field-help{display:block;font-size:11px;line-height:1.55;color:var(--muted);margin-top:8px;font-weight:400;overflow-wrap:anywhere}.check .field-help{max-width:440px}.form-grid>.check{flex-wrap:wrap}.form-grid>.check .field-help{flex-basis:100%}
+
+.device-status-counts{display:flex;gap:28px;margin:16px 0}.device-status-counts>div{flex:1}.device-status-counts strong{display:block;margin:0}.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}.status-dot.online{background:#4fdbbb}.status-dot.offline{background:#f08080}.device-online{color:#4fdbbb;background:#163b32}.device-offline{color:#ffabab;background:#402329}
+
+.diagnosis-panel{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:8px;white-space:normal;line-height:1.6}.diagnosis-panel summary{cursor:pointer;color:var(--accent);font-weight:600}.diagnosis-panel ul{padding-left:20px}.diagnosis-panel a{display:block;margin-top:10px;color:var(--accent)}#alert-edit-dialog{max-width:720px;width:90vw}#alert-edit-form{display:flex;flex-direction:column}
