@@ -37,7 +37,7 @@ type manifest struct {
 	UpdaterSize   int64  `json:"updater_size"`
 }
 
-const updaterVersion = "1.2.3"
+const updaterVersion = "1.2.4"
 
 var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 var repoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
@@ -262,6 +262,9 @@ func update() error {
 			}
 		}
 	}
+	if err = writeSnapshotManifest(backup); err != nil {
+		return err
+	}
 	helperChanged := false
 	revert := func(cause error) error {
 		if e := command("systemctl", "stop", "multipla-siem"); e != nil {
@@ -311,7 +314,39 @@ func main() {
 		fmt.Println("Multipla Siem Updater", updaterVersion)
 		return
 	}
-	if err := update(); err != nil {
+	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
+		fmt.Fprintln(os.Stderr, "execute como root no Debian/Ubuntu")
+		os.Exit(1)
+	}
+	args := os.Args[1:]
+	if len(args) == 0 || args[0] != "--operation-locked" {
+		executable, err := os.Executable()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		cmd := exec.Command("flock", append([]string{"-n", "/run/multipla-updater-operation.lock", executable, "--operation-locked"}, args...)...)
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		if err := cmd.Run(); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
+	args = args[1:]
+	var err error
+	switch {
+	case len(args) == 0:
+		err = update()
+	case len(args) == 1 && args[0] == "rollback":
+		err = rollbackUpdate("")
+	case len(args) == 2 && args[0] == "rollback":
+		err = rollbackUpdate(args[1])
+	case len(args) == 1 && args[0] == "list-backups":
+		err = listUpdateBackups()
+	default:
+		err = errors.New("uso: multipla-update [rollback [update-ID] | list-backups]")
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

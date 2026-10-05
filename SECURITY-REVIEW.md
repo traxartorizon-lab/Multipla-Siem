@@ -77,3 +77,8 @@ Webhook de saída exige HTTPS, valida certificados, recusa proxy automático e r
 ## 1.2.3
 
 Referrer-Policy same-origin preserva a origem de formularios locais, sem enviar Referer a sites externos. Verificacao estrita de Origin e CSRF mantida. Teste de regressao cobre origem correta, ausente, null e externa no cadastro e login. Cadastro por navegador exercitado em demonstracao local; persistencia de conta e senha correta/incorreta cobertas por testes Go. Erros de login exibidos como texto na propria tela, sem HTML injetado.
+
+
+## 1.2.4
+
+Novas rotas de edição e teste de regras mantêm autenticação e CSRF. Conteúdo de eventos nos gráficos e rascunhos usa textContent/DOM seguro. Rascunhos não habilitam bloqueio por padrão. Rollback exige root, usa trava exclusiva entre operações, valida IDs sem caminhos, rejeita snapshots incompletos e verifica hashes nos backups novos. Não usa comandos de shell montados com parâmetros do usuário. Snapshots legados exigem estrutura privada completa. Testes de unidade cobrem alteração indevida, JSON inválido, snapshots incompletos, CSRF e edição preservando expiração. O ciclo real de parada/partida do serviço no Debian não foi executado nesta estação Windows.

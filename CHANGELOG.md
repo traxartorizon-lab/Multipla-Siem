@@ -1,3 +1,13 @@
+# 1.2.4 — 2026-10-05
+
+- Gráfico de eventos por dispositivo, com alertas críticos destacados (nível 12 a 15).
+- Atividade recente separada por dispositivo, com seleção individual e legenda.
+- Edição de dispositivos, regras e motivos de resposta, preservando a expiração dos bloqueios; edição SNMP com cancelamento.
+- Exemplos de regras, criação de rascunhos a partir de eventos e teste de padrões Go/RE2 antes de salvar. Nenhum bloqueio é ativado automaticamente pelo rascunho.
+- Instruções e exemplos nos campos técnicos; esclarecimento de que credenciais OAuth não são a senha Gmail.
+- Correção da renderização de eventos quando existem alertas.
+- Backup pre-update com hashes e rollback manual offline, preservando logs e mantendo o atualizador atual.
+
 # 1.2.3
 
 Corrige Referrer-Policy dos formularios de acesso; preserva bloqueio de origem nula/externa.

@@ -27,7 +27,7 @@ async function saveSNMP(sources){
 $('#snmp-save').onclick=()=>run(()=>saveSNMP(receiverSources));
 $('#snmp-source-form').onsubmit=async event=>{
  event.preventDefault();const form=event.target,data=Object.fromEntries(new FormData(form));
- try{const sources=receiverSources.slice();if(receiverEditing>=0)sources[receiverEditing]=data;else sources.push(data);await saveSNMP(sources);receiverEditing=-1;form.reset();await renderReceivers(true)}catch(error){toast(error.message)}
+ try{const sources=receiverSources.slice();if(receiverEditing>=0)sources[receiverEditing]=data;else sources.push(data);await saveSNMP(sources);receiverEditing=-1;form.reset();form.querySelector('button[type="submit"]').textContent='Adicionar origem SNMP';$('#snmp-cancel').hidden=true;await renderReceivers(true)}catch(error){toast(error.message)}
 };
 $('#webhook-form').onsubmit=async event=>{
  event.preventDefault();const form=event.target;
@@ -48,4 +48,6 @@ $('#webhook-form').onsubmit=async event=>{
  }catch(error){toast(error.message)}
 };
 
-function sourceActions(source,index){const buttons=el('div');buttons.append(action('Editar',()=>{receiverEditing=index;const form=$('#snmp-source-form');form.reset();for(const key of ['name','ip','version','user','engine_id'])form.elements[key].value=source[key]||'';form.elements.name.focus();toast('Informe apenas os segredos que deseja alterar. Deixe todos vazios para preservar as credenciais.')}),action('Remover',()=>run(async()=>{await saveSNMP(receiverSources.filter((_,i)=>i!==index));receiverEditing=-1})));return buttons}
+function sourceActions(source,index){const buttons=el('div');buttons.append(action('Editar',()=>{receiverEditing=index;$('#snmp-cancel').hidden=false;$('#snmp-source-form button[type="submit"]').textContent='Salvar alterações';const form=$('#snmp-source-form');form.reset();for(const key of ['name','ip','version','user','engine_id'])form.elements[key].value=source[key]||'';form.elements.name.focus();toast('Informe apenas os segredos que deseja alterar. Deixe todos vazios para preservar as credenciais.')}),action('Remover',()=>run(async()=>{await saveSNMP(receiverSources.filter((_,i)=>i!==index));receiverEditing=-1})));return buttons}
+
+$('#snmp-cancel').onclick=()=>{receiverEditing=-1;const f=$('#snmp-source-form');f.reset();f.querySelector('button[type="submit"]').textContent='Adicionar origem SNMP';$('#snmp-cancel').hidden=true};

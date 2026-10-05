@@ -1263,6 +1263,38 @@ func (a *App) routes() http.Handler {
 		}
 		writeJSON(w, map[string]bool{"ok": true})
 	}))
+	mux.HandleFunc("POST /api/rules/test", a.auth(func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			Pattern string `json:"pattern"`
+			Kind    string `json:"kind"`
+			Message string `json:"message"`
+		}
+		if !decode(w, r, &input) {
+			return
+		}
+		if len(input.Pattern) == 0 || len(input.Pattern) > 1024 || len(input.Message) > 16384 {
+			http.Error(w, "Padrão ou mensagem excede o limite", 400)
+			return
+		}
+		re, err := regexp.Compile(input.Pattern)
+		if err != nil {
+			http.Error(w, "Padrão Go/RE2 inválido: "+err.Error(), 400)
+			return
+		}
+		checked, matches := 0, 0
+		a.mu.Lock()
+		for _, event := range a.events {
+			if input.Kind != "any" && input.Kind != event.Kind {
+				continue
+			}
+			checked++
+			if re.MatchString(event.Message) {
+				matches++
+			}
+		}
+		a.mu.Unlock()
+		writeJSON(w, map[string]any{"sample_match": re.MatchString(input.Message), "checked": checked, "matches": matches})
+	}))
 	mux.HandleFunc("PUT /api/rules", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		var rs []Rule
 		if !decode(w, r, &rs) {
@@ -1305,6 +1337,40 @@ func (a *App) routes() http.Handler {
 		defer a.mu.Unlock()
 		if e := a.block(b.IP, b.Reason, s.Email); e != nil {
 			http.Error(w, e.Error(), 400)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	}))
+	mux.HandleFunc("PUT /api/blocks/{ip}", a.auth(func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			Reason string `json:"reason"`
+		}
+		if !decode(w, r, &input) {
+			return
+		}
+		input.Reason = strings.TrimSpace(input.Reason)
+		if input.Reason == "" || len(input.Reason) > 256 {
+			http.Error(w, "Informe motivo de até 256 caracteres", 400)
+			return
+		}
+		session, _ := a.session(r)
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		ip := r.PathValue("ip")
+		old, ok := a.state.Blocks[ip]
+		if !ok || !old.Expires.After(time.Now()) {
+			http.Error(w, "Resposta não encontrada ou expirada", 404)
+			return
+		}
+		changed := old
+		changed.Reason = input.Reason
+		oldAudit := append([]Audit(nil), a.state.Audit...)
+		a.state.Blocks[ip] = changed
+		a.audit(session.Email, "edição do motivo da resposta "+ip)
+		if err := a.persist(); err != nil {
+			a.state.Blocks[ip] = old
+			a.state.Audit = oldAudit
+			http.Error(w, "Falha ao salvar a resposta", 500)
 			return
 		}
 		writeJSON(w, map[string]bool{"ok": true})
@@ -1481,7 +1547,7 @@ func main() {
 	check := flag.Bool("check", false, "validar configuração e credenciais sem iniciar o servidor")
 	flag.Parse()
 	if *version {
-		fmt.Println("Multipla Siem 1.2.3")
+		fmt.Println("Multipla Siem 1.2.4")
 		return
 	}
 	if *firstBoot {
