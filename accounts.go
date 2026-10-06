@@ -118,6 +118,11 @@ func (a *App) registerAccountRoutes(mux *http.ServeMux) {
 			return
 		}
 		a.cfg = cfg
+		for _, terminal := range a.sshTerminals {
+			if strings.EqualFold(terminal.owner, input.Email) {
+				terminal.close("Permissão de acesso alterada")
+			}
+		}
 		for id, session := range a.sessions {
 			if strings.EqualFold(session.Email, input.Email) {
 				delete(a.sessions, id)

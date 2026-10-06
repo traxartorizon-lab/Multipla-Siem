@@ -1,19 +1,23 @@
-Multipla Siem 1.2.5 adiciona recuperação completa criptografada e contas com perfis de acesso.
+# 1.2.6 — 2026-10-05
 
-- Backup completo AES-256-GCM em blocos autenticados, compressão e processamento em fluxo para limitar memória. Inclui dados e logs do SIEM, contas e hashes de senha, credenciais de integrações, certificados, identidade Tailscale e binários. Não é uma imagem do Debian e não inclui backups anteriores.
-- Chave aleatória de recuperação de 256 bits separada, em /root/multipla-siem-recovery.key. Nunca é enviada ao Drive. É indispensável guardar uma cópia fora do servidor.
-- Envio ao Drive da conta administrativa já autorizada, com validação do destino HTTPS, tamanho e checksum do envio. Falha de rede preserva a cópia local.
-- Agendamento diário por systemd, com horário e fuso das preferências. Exige ativação uma vez como root.
-- Restauração valida autenticação, conteúdo, caminhos e limites antes de alterar a instalação; cria checkpoint criptografado. Exige servidor original desligado, evitando duplicar a identidade Tailscale.
-- Cadastro e edição de contas administrativas ou somente visualização, login local opcional e desativação de acesso. A conta administrativa principal é protegida.
-- Perfil de visualização é limitado no servidor: não altera configurações, acessa backups/credenciais nem executa respostas. Mudanças de conta encerram sessões anteriores.
+- O atualizador e o rollback aguardam até dois minutos pela disponibilidade HTTPS do painel, consultando a cada dois segundos. A validação do certificado e a restauração automática permanecem obrigatórias.
+- Dashboard em cards por assunto, reorganizáveis por arraste ou setas. A disposição é salva por conta no servidor, inclusive para visualização, e integra os backups. Há cancelamento e restauração do padrão.
+- Relatórios históricos por período UTC de até 31 dias, dispositivo, origem (incluindo pfSense e Proxmox), tipo (logs/alertas), nível e IP de origem IPv4/IPv6.
+- Atalho para relatório de segurança com críticos pfSense/Proxmox, resumo por dispositivo/nível e IPs de origem dos críticos. Logs sem origem identificável são indicados; não se usa o endereço do remetente como substituto.
+- Exportação do relatório JSON, CSV dos registros exibidos e PDF pelo diálogo de impressão do navegador (Salvar como PDF), com filtros, resumo e tabelas.
 
-A atualização preserva o login Google, o domínio Tailscale e os cadastros existentes. Credenciais revogadas ou expiradas por provedores externos ainda exigem reconexão. A integração unificada para enviar Gmail por OAuth ainda não está incluída.
+- Atualizador espera a disponibilidade HTTPS por até 120 segundos e preserva rollback automático.
+- Dashboard organizado por assunto, com cards móveis e preferência por conta.
+- Relatórios por período, equipamento, severidade e IP de origem; JSON, CSV e impressão para salvar em PDF.
+- Equipamentos por cliente/unidade; ping rápido, contínuo, traceroute e scans TCP com Nmap.
+- Terminais SSH internos para pfSense/Proxmox, validação de identificação do servidor e credenciais solicitadas a cada conexão, sem armazenamento.
+- Botões de diagnóstico com comando editável, execução explícita e balões informativos.
+- Pesquisa complementar opcional para o Ollama local, com fontes. Requer BRAVE_SEARCH_API_KEY; consultas contêm somente termos técnicos constantes reconhecidos.
+- Marcação manual de eventos críticos, destaque vermelho e preservação do log original.
+- pfSense: extração ampliada de origem SSH/sshguard; regra dedicada com 5 eventos Invalid user/Failed password for invalid user do mesmo IP em 60 segundos. Simulação/publicação e redes protegidas continuam respeitadas.
+- Eventos das últimas 24 horas em disco, paginação de 100 registros e pausa da atualização visual, sem parar a coleta.
+- Cadastro de rede incluído em backup JSON; recuperação completa preserva o estado do SIEM.
 
-Consulte FULL-BACKUP.md para os comandos de criação, agendamento e restauração. Os backups completos .msbk são independentes dos backups simples JSON do painel. Não devem ser importados como JSON. Não há remoção automática de cópias completas; monitore o espaço local e no Drive.
+A consulta percorre o histórico retido, limitado a 64 MiB e 20 segundos por execução, com duas consultas simultâneas. Resultados parciais e arquivos ausentes são indicados. Totais abrangem os registros lidos; detalhes/CSV/PDF incluem até 1.000 registros. Logs e alertas derivados são contados separadamente.
 
-Indicador de dispositivos separa Online e Offline. Para IPs encontrados no Tailscale, usa a presença informada pelo daemon, consultada a cada 15 segundos. Para outros dispositivos, usa atividade de eventos nos últimos cinco minutos, identificando essa referência no painel. Presença no Tailscale não confirma que todos os serviços do dispositivo respondem.
-
-- Análise local permanentemente ativa, inclusive após atualização/importação/reinício. Cada log crítico recebe diagnóstico com causas possíveis, verificações e orientações da base local, sem supressão por cooldown. Eventos antigos da janela recebem diagnóstico ao consultar o painel.
-- Integração generativa local pelo Ollama, com consulta contínua de disponibilidade, fila limitada e modelo instalado selecionável. A instalação e o download do modelo no Debian são uma etapa inicial separada; não há modelo incluído nos binários SIEM. Sem modelo disponível, a base local continua ativa.
-- Alertas podem receber título de avaliação, nível avaliado, estado e observações auditadas; o evento original e sua classificação permanecem preservados. Edição de regras disponível na lista.
+Na primeira transição de um atualizador 1.2.5 ou anterior, a espera antiga ainda é executada pelo processo já instalado. Em servidores cuja partida ultrapasse oito segundos, a espera temporária do systemd pode ser necessária mais uma vez para instalar o novo atualizador. A partir do atualizador 1.2.6, não será necessária nas atualizações seguintes.

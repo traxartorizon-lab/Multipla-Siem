@@ -11,6 +11,7 @@ import (
 
 func TestRulePreviewAuthenticatedAndReadOnly(t *testing.T) {
 	a := testApp(t)
+	initialRules := len(a.state.Rules)
 	a.events = []Event{{Kind: "pfsense", Message: "blocked"}, {Kind: "proxmox", Message: "blocked"}}
 	a.sessions["test"] = Session{Email: "admin@gmail.com", CSRF: "csrf", Expires: time.Now().Add(time.Hour)}
 	for _, tc := range []struct {
@@ -42,7 +43,7 @@ func TestRulePreviewAuthenticatedAndReadOnly(t *testing.T) {
 			}
 		}
 	}
-	if len(a.state.Blocks) != 0 || len(a.state.Rules) != 3 {
+	if len(a.state.Blocks) != 0 || len(a.state.Rules) != initialRules {
 		t.Fatal("preview mutated state")
 	}
 }

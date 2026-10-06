@@ -102,22 +102,26 @@ type Audit struct {
 	Action string    `json:"action"`
 }
 type State struct {
-	AlertReviews    map[string]AlertReview    `json:"alert_reviews,omitempty"`
-	LocalAIModel    string                    `json:"local_ai_model,omitempty"`
-	ModelDiagnoses  map[string]ModelDiagnosis `json:"model_diagnoses,omitempty"`
-	Accounts        map[string]AccessAccount  `json:"accounts,omitempty"`
-	Receivers       ReceiverSettings          `json:"receivers"`
-	SNMPClocks      map[string]SNMPClock      `json:"snmp_clocks,omitempty"`
-	GoogleSettings  string                    `json:"google_settings_encrypted,omitempty"`
-	LocalAdmin      LocalAdmin                `json:"local_admin,omitempty"`
-	GoogleSubjects  map[string]string         `json:"google_subjects,omitempty"`
-	Preferences     map[string]Preferences    `json:"preferences,omitempty"`
-	BackupStatus    map[string]BackupStatus   `json:"backup_status,omitempty"`
-	DriveTokens     map[string]string         `json:"drive_tokens_encrypted,omitempty"`
-	Rules           []Rule                    `json:"rules"`
-	Blocks          map[string]Block          `json:"blocks"`
-	Audit           []Audit                   `json:"audit"`
-	BootstrapDigest string                    `json:"bootstrap_digest,omitempty"`
+	PFSourceMigration bool                       `json:"pf_source_migration,omitempty"`
+	SSHHostKeys       map[string]SSHHostIdentity `json:"ssh_host_keys,omitempty"`
+	NetworkEquipment  []NetworkEquipment         `json:"network_equipment,omitempty"`
+	AlertReviews      map[string]AlertReview     `json:"alert_reviews,omitempty"`
+	InternetAnalysis  bool                       `json:"internet_analysis,omitempty"`
+	LocalAIModel      string                     `json:"local_ai_model,omitempty"`
+	ModelDiagnoses    map[string]ModelDiagnosis  `json:"model_diagnoses,omitempty"`
+	Accounts          map[string]AccessAccount   `json:"accounts,omitempty"`
+	Receivers         ReceiverSettings           `json:"receivers"`
+	SNMPClocks        map[string]SNMPClock       `json:"snmp_clocks,omitempty"`
+	GoogleSettings    string                     `json:"google_settings_encrypted,omitempty"`
+	LocalAdmin        LocalAdmin                 `json:"local_admin,omitempty"`
+	GoogleSubjects    map[string]string          `json:"google_subjects,omitempty"`
+	Preferences       map[string]Preferences     `json:"preferences,omitempty"`
+	BackupStatus      map[string]BackupStatus    `json:"backup_status,omitempty"`
+	DriveTokens       map[string]string          `json:"drive_tokens_encrypted,omitempty"`
+	Rules             []Rule                     `json:"rules"`
+	Blocks            map[string]Block           `json:"blocks"`
+	Audit             []Audit                    `json:"audit"`
+	BootstrapDigest   string                     `json:"bootstrap_digest,omitempty"`
 }
 type Session struct {
 	Subject string
@@ -136,6 +140,8 @@ type bucket struct {
 	Last  time.Time
 }
 type App struct {
+	sshTerminals   map[string]*sshTerminal
+	networkTests   map[string]*NetworkTest
 	aiQueue        chan Event
 	aiPending      map[string]bool
 	aiStatus       localAIStatus
@@ -192,6 +198,7 @@ func equal(a, b string) bool {
 }
 func defaults() []Rule {
 	return []Rule{
+		pfsenseGuardRule(),
 		{"ssh-brute", "Tentativas repetidas de acesso", "any", `(?i)(failed password|authentication failure|authentication failed|invalid user)`, 5, 120, 10, true, true},
 		{"firewall-burst", "Conexões bloqueadas em sequência", "pfsense", `filterlog:.*`, 30, 60, 8, false, true},
 		{"system-failure", "Falha de serviço ou armazenamento", "proxmox", `(?i)(I/O error|out of memory|oom-kill|task.*error|backup.*failed)`, 1, 60, 9, false, true},
@@ -315,6 +322,23 @@ func newApp(c Config, path string, demo bool) (*App, error) {
 		}
 	} else if !os.IsNotExist(e) {
 		return nil, e
+	}
+	if !a.state.PFSourceMigration {
+		found := false
+		for _, rule := range a.state.Rules {
+			if rule.ID == "pfsense-sshguard" {
+				found = true
+			}
+		}
+		if !found {
+			a.state.Rules = append(a.state.Rules, pfsenseGuardRule())
+		}
+		a.state.PFSourceMigration = true
+		if e == nil {
+			if err := a.persist(); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if a.state.GoogleSettings != "" {
 		if settings, err := openDriveToken("multipla-oauth-config", a.state.GoogleSettings); err == nil {
@@ -464,6 +488,9 @@ func (a *App) appendEvent(e Event) bool {
 }
 func sourceIP(raw, kind string) string {
 	if kind == "pfsense" {
+		if ip := pfsenseSSHSource(raw); ip != "" {
+			return ip
+		}
 		if i := strings.Index(raw, "filterlog:"); i >= 0 {
 			f := strings.Split(strings.TrimSpace(raw[i+10:]), ",")
 			if len(f) > 19 && f[8] == "4" && f[6] == "block" {
@@ -612,6 +639,10 @@ func (a *App) ingest(d Device, raw string) {
 func (a *App) evaluateRules(ev Event, raw string, d Device) {
 	now := ev.Time
 	for _, r := range a.state.Rules {
+		// The dedicated one-minute pfSense policy replaces the legacy generic SSH rule.
+		if d.Kind == "pfsense" && r.ID == "ssh-brute" {
+			continue
+		}
 		if !r.Enabled || (r.Kind != "any" && r.Kind != d.Kind) {
 			continue
 		}
@@ -619,7 +650,7 @@ func (a *App) evaluateRules(ev Event, raw string, d Device) {
 		if !re.MatchString(raw) {
 			continue
 		}
-		if r.ID == "firewall-burst" && ev.SourceIP == "" {
+		if (r.ID == "firewall-burst" || r.ID == "pfsense-sshguard") && ev.SourceIP == "" {
 			continue
 		}
 		key := r.ID + "|" + d.IP + "|" + ev.SourceIP
@@ -1003,7 +1034,7 @@ func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
 		role := a.roleLocked(s.Email)
 
 		a.mu.Unlock()
-		if role != "admin" && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export")) {
+		if role != "admin" && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && !(r.Method == "PUT" && r.URL.Path == "/api/dashboard/layout") && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export" && r.URL.Path != "/api/events/history" && r.URL.Path != "/api/reports" && r.URL.Path != "/api/network")) {
 			http.Error(w, "Perfil somente visualizacao: operacao nao permitida", 403)
 			return
 		}
@@ -1126,7 +1157,12 @@ func (a *App) routes() http.Handler {
 	a.registerAccountRoutes(mux)
 	a.registerAlertRoutes(mux)
 	a.registerLocalAIRoutes(mux)
+	a.registerHistoryRoutes(mux)
 	a.registerBackupRoutes(mux)
+	a.registerDashboardRoutes(mux)
+	a.registerReportRoutes(mux)
+	a.registerNetworkRoutes(mux)
+	a.registerSSHRoutes(mux)
 	a.registerLocalAuth(mux)
 	a.registerGoogleSettings(mux)
 	a.registerReceiverRoutes(mux)
@@ -1143,10 +1179,10 @@ func (a *App) routes() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(b)
 	})
-	for _, path := range []string{"style.css", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js"} {
+	for _, path := range []string{"style.css", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "xterm.js", "xterm.css"} {
 		p := path
 		mux.HandleFunc("GET /"+p, func(w http.ResponseWriter, r *http.Request) {
-			if p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" {
+			if p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" || p == "dashboard.js" || p == "reports.js" || p == "network.js" || p == "ssh.js" || p == "xterm.js" {
 				w.Header().Set("Content-Type", "text/javascript")
 			} else {
 				w.Header().Set("Content-Type", "text/css")
@@ -1206,8 +1242,14 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /auth/logout", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		value, _ := a.cookieValue(r, a.sessionName())
 		a.mu.Lock()
+		owner := a.sessions[value].Email
 		delete(a.sessions, value)
 		delete(a.active, value)
+		for _, terminal := range a.sshTerminals {
+			if strings.EqualFold(terminal.owner, owner) {
+				terminal.close("Sessão SIEM encerrada")
+			}
+		}
 		a.mu.Unlock()
 		a.securityEvent("sessão encerrada", a.clientIP(r))
 		a.cookie(w, a.sessionName(), "", -1)
@@ -1233,6 +1275,11 @@ func (a *App) routes() http.Handler {
 			if review, ok := a.state.AlertReviews[e.ID]; ok {
 				copy := review
 				e.Review = &copy
+				if copy.Level >= 12 && copy.Status != "false_positive" {
+					marked := e
+					marked.Level = copy.Level
+					e.Diagnosis = localDiagnosis(marked)
+				}
 			}
 			if result, ok := a.state.ModelDiagnoses[diagnosisKey(e)]; ok {
 				copy := result
@@ -1642,7 +1689,7 @@ func main() {
 		return
 	}
 	if *version {
-		fmt.Println("Multipla Siem 1.2.5")
+		fmt.Println("Multipla Siem 1.2.6")
 		return
 	}
 	if *firstBoot {

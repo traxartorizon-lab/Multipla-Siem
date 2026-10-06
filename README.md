@@ -162,3 +162,7 @@ A ISO 1.2 inicia HTTPS automaticamente. Use o código exclusivo exibido no conso
 UniFi/CEF com classificação de alertas, traps SNMPv2c/SNMPv3 authPriv e webhooks de entrada e saída. A página Syslog, SNMP e webhook separa as configurações. Consulte [Guia dos receptores](UNIFI-SNMP-WEBHOOK.md). A distribuição inclui GoSNMP v1.45.0 e seu código em vendor para compilação offline; a ISO usa binário pronto.
 
 Atualizacao de versoes e publicacao assinada: consulte [UPDATES.md](UPDATES.md). A ISO 1.2.5 inclui SSH e tenta atualizacoes Debian sem exigir conectividade para concluir a base local.
+
+## Dashboard e relatórios
+
+Organizar cards permite arrastar ou usar setas, salvar por conta, cancelar e restaurar o padrão. Relatórios consulta o histórico retido por período UTC (até 31 dias), dispositivo, tipo, nível e IP de origem. Segurança aplica críticos pfSense/Proxmox. Exportar PDF abre a impressão do navegador: escolha Salvar como PDF. CSV/PDF contêm até 1.000 detalhes; resumos indicam leitura parcial e dias ausentes. A disposição integra os backups de preferências.

@@ -23,7 +23,7 @@ import (
 // systemd credentials stay out of the service's inherited environment.
 // Environment fallback is for development/manual runs, not the supplied service.
 var credentialValues map[string]string
-var secretNames = []string{"BACKUP_ENCRYPTION_KEY", "BOOTSTRAP_TOKEN", "INGEST_TOKEN", "PFSENSE_FEED_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GMAIL_USER", "GMAIL_APP_PASSWORD"}
+var secretNames = []string{"BRAVE_SEARCH_API_KEY", "BACKUP_ENCRYPTION_KEY", "BOOTSTRAP_TOKEN", "INGEST_TOKEN", "PFSENSE_FEED_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GMAIL_USER", "GMAIL_APP_PASSWORD"}
 
 func secret(name string) string {
 	if credentialValues != nil {

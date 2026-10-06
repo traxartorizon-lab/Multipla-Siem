@@ -34,9 +34,15 @@ func (a *App) registerAlertRoutes(mux *http.ServeMux) {
 		id := r.PathValue("id")
 		found := false
 		for _, event := range a.events {
-			if event.ID == id && event.Alert {
+			if event.ID == id {
 				found = true
 				break
+			}
+		}
+		if !found {
+			history, _, _, err := a.historyEvents(r, 0, id)
+			if err == nil && len(history) == 1 {
+				found = true
 			}
 		}
 		if !found {
@@ -71,6 +77,16 @@ func (a *App) registerAlertRoutes(mux *http.ServeMux) {
 			a.state.Audit = oldAudit
 			http.Error(w, "Falha ao salvar acompanhamento", 500)
 			return
+		}
+		if value.Level >= 12 && value.Status != "false_positive" {
+			for _, event := range a.events {
+				if event.ID == id {
+					event.Level = value.Level
+					event.Diagnosis = localDiagnosis(event)
+					a.enqueueLocalAI(event)
+					break
+				}
+			}
 		}
 		writeJSON(w, map[string]bool{"ok": true})
 	}))

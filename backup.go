@@ -20,19 +20,23 @@ import (
 const backupLimit = 1024 * 1024
 
 type Preferences struct {
-	DefaultPage    string `json:"default_page"`
-	RefreshSeconds int    `json:"refresh_seconds"`
-	AlertMinLevel  int    `json:"alert_min_level"`
-	BackupDaily    bool   `json:"backup_daily"`
-	BackupTime     string `json:"backup_time"`
-	BackupTimezone string `json:"backup_timezone"`
-	BackupDrive    bool   `json:"backup_drive"`
+	DashboardOrder []string `json:"dashboard_order,omitempty"`
+	DefaultPage    string   `json:"default_page"`
+	RefreshSeconds int      `json:"refresh_seconds"`
+	AlertMinLevel  int      `json:"alert_min_level"`
+	BackupDaily    bool     `json:"backup_daily"`
+	BackupTime     string   `json:"backup_time"`
+	BackupTimezone string   `json:"backup_timezone"`
+	BackupDrive    bool     `json:"backup_drive"`
 }
 
 func defaultPreferences() Preferences {
 	return Preferences{DefaultPage: "overview", RefreshSeconds: 5, AlertMinLevel: 1, BackupTime: "02:00", BackupTimezone: "America/Sao_Paulo"}
 }
 func validatePreferences(p Preferences) error {
+	if err := validateDashboardOrder(p.DashboardOrder); err != nil {
+		return err
+	}
 	switch p.DefaultPage {
 	case "overview", "events", "devices", "rules", "blocks", "settings", "audit", "backups":
 	default:
@@ -73,15 +77,16 @@ type BackupConfig struct {
 	LocalAnalysis bool     `json:"local_analysis"`
 }
 type BackupDocument struct {
-	Receivers   *ReceiverSettings `json:"receivers,omitempty"`
-	Product     string            `json:"product"`
-	Schema      int               `json:"schema"`
-	Version     string            `json:"version"`
-	Created     time.Time         `json:"created"`
-	Owner       string            `json:"owner_email"`
-	Config      BackupConfig      `json:"config"`
-	Rules       []Rule            `json:"rules"`
-	Preferences Preferences       `json:"preferences"`
+	NetworkEquipment *[]NetworkEquipment `json:"network_equipment,omitempty"`
+	Receivers        *ReceiverSettings   `json:"receivers,omitempty"`
+	Product          string              `json:"product"`
+	Schema           int                 `json:"schema"`
+	Version          string              `json:"version"`
+	Created          time.Time           `json:"created"`
+	Owner            string              `json:"owner_email"`
+	Config           BackupConfig        `json:"config"`
+	Rules            []Rule              `json:"rules"`
+	Preferences      Preferences         `json:"preferences"`
 }
 type BackupEntry struct {
 	ID      string    `json:"id"`
@@ -108,7 +113,8 @@ func (a *App) backupDocument(email string) BackupDocument {
 	receivers.InboundEnabled = false
 	receivers.OutboundEnabled = false
 	receivers.SNMPEnabled = false
-	return BackupDocument{Receivers: &receivers, Product: "Multipla Siem", Schema: 1, Version: "1.2.5", Created: time.Now().UTC(), Owner: email, Config: BackupConfig{c.RetentionDays, c.AllowedEmails, c.Devices, c.Protected, c.BlockMinutes, c.MailTo, c.MailMinLevel, c.FeedAllowed, c.MaxDailyMB, c.LocalAnalysis}, Rules: a.state.Rules, Preferences: a.preferences(email)}
+	equipment := append([]NetworkEquipment{}, a.state.NetworkEquipment...)
+	return BackupDocument{NetworkEquipment: &equipment, Receivers: &receivers, Product: "Multipla Siem", Schema: 1, Version: "1.2.6", Created: time.Now().UTC(), Owner: email, Config: BackupConfig{c.RetentionDays, c.AllowedEmails, c.Devices, c.Protected, c.BlockMinutes, c.MailTo, c.MailMinLevel, c.FeedAllowed, c.MaxDailyMB, c.LocalAnalysis}, Rules: a.state.Rules, Preferences: a.preferences(email)}
 }
 func decodeBackup(data []byte) (BackupDocument, error) {
 	var b BackupDocument
@@ -129,6 +135,21 @@ func decodeBackup(data []byte) (BackupDocument, error) {
 	}
 	if e := validatePreferences(b.Preferences); e != nil {
 		return b, e
+	}
+	if b.NetworkEquipment != nil {
+		if len(*b.NetworkEquipment) > 500 {
+			return b, errors.New("muitos equipamentos")
+		}
+		ids := map[string]bool{}
+		for _, d := range *b.NetworkEquipment {
+			if d.ID == "" || len(d.ID) > 128 || ids[d.ID] {
+				return b, errors.New("identificador de equipamento inválido")
+			}
+			ids[d.ID] = true
+			if err := validateEquipment(d); err != nil {
+				return b, err
+			}
+		}
 	}
 	if e := validateRules(b.Rules); e != nil {
 		return b, e
@@ -203,6 +224,10 @@ func (a *App) restoreBackup(email string, data []byte) error {
 	}
 	a.cfg = c
 	a.state.Rules = b.Rules
+	if b.NetworkEquipment != nil {
+		a.state.NetworkEquipment = append([]NetworkEquipment{}, (*b.NetworkEquipment)...)
+		a.state.SSHHostKeys = nil
+	}
 	a.state.Preferences = prefs
 	if b.Receivers != nil {
 		receivers := *b.Receivers

@@ -185,8 +185,7 @@ func rollbackUpdate(id string) error {
 		err = command("systemctl", "start", "multipla-siem")
 	}
 	if err == nil {
-		time.Sleep(8 * time.Second)
-		err = healthy()
+		err = waitHealthy()
 	}
 	if err != nil {
 		if stopErr := command("systemctl", "stop", "multipla-siem"); stopErr != nil {

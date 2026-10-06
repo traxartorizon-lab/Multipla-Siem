@@ -38,3 +38,10 @@ O modelo recebe logs com a redação de segredos aplicada pelo SIEM. O log é da
 O backup completo recupera a seleção de modelo, os diagnósticos e as avaliações. Ollama e seus pesos são dependências externas e não estão incluídos no backup do SIEM; reinstale-os no servidor de recuperação. A base local funciona mesmo sem essa reinstalação. O SIEM não preserva um histórico ilimitado de inferências ou acompanhamentos.
 
 Referências da base: https://cdn.kernel.org/doc/html/latest/admin-guide/sysctl/vm.html, https://openzfs.github.io/openzfs-docs/Basic%20Concepts/Operations/Troubleshooting.html e https://docs.netgate.com/pfsense/en/latest/troubleshooting/authentication.html. Referência da API: https://docs.ollama.com/api/chat e https://docs.ollama.com/faq.
+
+
+## Pesquisa complementar opcional
+
+Em Configurações, habilite a pesquisa complementar e configure `BRAVE_SEARCH_API_KEY` em `/etc/multipla-siem/secrets.env`; reinicie o serviço. A chave autentica somente no endpoint HTTPS fixo da Brave Search API. A consulta contém apenas o produto e assinaturas de erros constantes reconhecidas pelo sistema. Nunca contém o log bruto, IPs, MACs, nomes, senhas ou tokens dos eventos. Erros desconhecidos não são enviados. Sem chave, internet ou cota, a análise local continua.
+
+São usados até três resumos do índice de busca, com links das fontes, como contexto não confiável para o Ollama local. Não há navegação livre do modelo, download de URLs indicadas pelo log ou execução de comandos. A pesquisa não garante causa raiz e as fontes precisam ser revisadas. A configuração é inicialmente desativada. O provedor pode exigir conta e cota de API.

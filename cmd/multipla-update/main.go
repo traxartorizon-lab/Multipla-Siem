@@ -37,7 +37,7 @@ type manifest struct {
 	UpdaterSize   int64  `json:"updater_size"`
 }
 
-const updaterVersion = "1.2.5"
+const updaterVersion = "1.2.6"
 
 var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 var repoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
@@ -102,7 +102,9 @@ func copyFile(from, to string, mode os.FileMode) error {
 	}
 	return os.WriteFile(to, b, mode)
 }
-func healthy() error {
+func healthy() error { return healthyContext(context.Background()) }
+
+func healthyContext(ctx context.Context) error {
 	raw, err := os.ReadFile("/var/lib/multipla-siem/config.json")
 	if err != nil {
 		return err
@@ -135,7 +137,11 @@ func healthy() error {
 		return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", port))
 	}
 	client := &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	response, err := client.Get(cfg.PublicURL + "/")
+	request, err := http.NewRequestWithContext(ctx, "GET", cfg.PublicURL+"/", nil)
+	if err != nil {
+		return err
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		return err
 	}
@@ -298,11 +304,10 @@ func update() error {
 	if err = command("systemctl", "start", "multipla-siem"); err != nil {
 		return revert(errors.New("falha na partida"))
 	}
-	time.Sleep(8 * time.Second)
 	if err = exec.Command("systemctl", "is-active", "--quiet", "multipla-siem").Run(); err != nil {
 		return revert(errors.New("servico falhou"))
 	}
-	if err = healthy(); err != nil {
+	if err = waitHealthy(); err != nil {
 		return revert(fmt.Errorf("painel indisponivel: %w", err))
 	}
 	installed = true

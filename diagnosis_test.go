@@ -116,3 +116,21 @@ func TestLocalAIUsesOnlyLoopbackAndRedactsOutput(t *testing.T) {
 		}
 	}
 }
+
+func TestMarkOrdinaryEventCriticalPreservesEvidence(t *testing.T) {
+	a := testApp(t)
+	event := Event{ID: token(), Time: time.Now(), Device: "Firewall", Level: 1, Message: "ordinary event"}
+	if !a.appendEvent(event) {
+		t.Fatal("journal")
+	}
+	before, _ := os.ReadFile(a.journalPath(event.Time))
+	w := httptest.NewRecorder()
+	a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "PUT", "/api/alerts/"+event.ID, []byte(`{"title":"Evento crítico","level":15,"status":"open","notes":""}`)))
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	after, _ := os.ReadFile(a.journalPath(event.Time))
+	if !bytes.Equal(before, after) || a.events[0].Level != 1 || a.state.AlertReviews[event.ID].Level != 15 {
+		t.Fatal("evidence or review invalid")
+	}
+}
