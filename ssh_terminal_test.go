@@ -90,3 +90,29 @@ func TestSSHUserOverrideValidatedWithoutSavingCredentials(t *testing.T) {
 		t.Fatal("credential persisted")
 	}
 }
+
+func TestTerminalStyleNonceIsPerPageAndScriptPolicyRemainsStrict(t *testing.T) {
+	a := testApp(t)
+	var previous string
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		a.routes().ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+		policy := w.Header().Get("Content-Security-Policy")
+		marker := "style-src 'self' 'nonce-"
+		start := strings.Index(policy, marker)
+		if start < 0 {
+			t.Fatal("missing style nonce", policy)
+		}
+		nonce := strings.Split(policy[start+len(marker):], "'")[0]
+		if nonce == "" || nonce == previous {
+			t.Fatal("nonce reused or empty")
+		}
+		if !strings.Contains(w.Body.String(), "content=\""+nonce+"\"") {
+			t.Fatal("nonce missing in page")
+		}
+		if strings.Contains(policy, "unsafe-inline") || !strings.Contains(policy, "script-src 'self';") {
+			t.Fatal("script policy changed")
+		}
+		previous = nonce
+	}
+}

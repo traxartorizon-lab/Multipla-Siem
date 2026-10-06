@@ -1176,6 +1176,11 @@ func (a *App) routes() http.Handler {
 			page = "web/index.html"
 		}
 		b, _ := assets.ReadFile(page)
+		// Only trusted terminal style elements receive this per-response nonce.
+		nonce := token()
+		policy := w.Header().Get("Content-Security-Policy")
+		w.Header().Set("Content-Security-Policy", strings.Replace(policy, "style-src 'self'", "style-src 'self' 'nonce-"+nonce+"'", 1))
+		b = []byte(strings.Replace(string(b), "<head>", "<head><meta name=\"terminal-style-nonce\" content=\""+nonce+"\">", 1))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(b)
 	})
@@ -1689,7 +1694,7 @@ func main() {
 		return
 	}
 	if *version {
-		fmt.Println("Multipla Siem 1.2.11")
+		fmt.Println("Multipla Siem 1.2.12")
 		return
 	}
 	if *firstBoot {

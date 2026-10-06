@@ -1,5 +1,5 @@
-# Multipla Siem 1.2.11
+# Multipla Siem 1.2.12
 
-Corrige o corte dos balões de informação dos comandos SSH. Os balões são exibidos fora dos painéis com overflow e sua posição é limitada à área visível da janela, nas bordas laterais e verticais. Funcionam ao passar o mouse ou focar o ícone pelo teclado, e fecham ao sair, rolar, redimensionar ou pressionar Escape.
+Corrige o bloqueio de cores ANSI pelo CSP: estilos dinâmicos do xterm recebem nonce aleatório por página. A política de scripts permanece restrita, sem unsafe-inline. Não modifica a saída SSH ou configurações do equipamento.
 
-Validação: testes de posicionamento em telas estreitas e largas, bordas esquerda/direita e superior/inferior; confirmação SSH; sintaxe JavaScript; testes Go e vet.
+Validação: cores ANSI no navegador com CSP ativo, sem erros de estilo; nonce único por resposta HTML; testes Go e vet.
