@@ -30,3 +30,5 @@ Coletor Linux: selecione Linux no cadastro e baixe o instalador no card do dispo
 1.2.15: corrige disponibilização do JavaScript de dashboard, dispositivos, métricas e reinício. Verifica todos os scripts e estilos referenciados na página por meio das rotas HTTP reais. Disposição anterior preservada; use Organizar cards > Restaurar padrão > Salvar disposição para aplicar o arranjo novo.
 
 1.2.16: corrige versão interna do atualizador e adiciona teste que exige igualdade com VERSION do produto. Inclui correções de dashboard e confirmação de reboot da 1.2.15.
+
+1.2.17: atalhos explícitos Cadastrar Windows e Cadastrar Linux em Equipamentos de rede, abrindo formulário canônico de Dispositivos com tipo e filtros de cliente/unidade preenchidos, com acesso à chave e download do coletor. Sem cadastro duplicado ou credenciais SSH.

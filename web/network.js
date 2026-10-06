@@ -43,3 +43,14 @@ document.querySelectorAll('[data-network-tab]').forEach(button=>button.onclick=(
 $('#network-client').onchange=()=>{setNetworkOptions($('#network-unit'),networkData.devices.filter(d=>!$('#network-client').value||d.client===$('#network-client').value).map(d=>d.unit),'Todas as unidades');renderNetworkInventory();renderNetworkSelection();renderNetworkResults()};
 $('#network-unit').onchange=()=>{renderNetworkInventory();renderNetworkSelection();renderNetworkResults()};
 $('#network-start').onclick=()=>run(async()=>{const filtered=new Set(networkFilteredDevices().map(d=>d.id)),ids=[...networkSelections].filter(id=>filtered.has(id));await api('/api/network/tests','POST',{ids,mode:networkMode,ports:networkMode==='ports'?$('#network-ports').value.trim():''});await renderNetwork()});
+
+function registerCollectorHost(kind){
+ if(snapshot?.role==='viewer')return;
+ const client=$('#network-client').value,unit=$('#network-unit').value;
+ cancelRecordEdit('device');goto('devices');const form=$('#device-form');form.elements.kind.value=kind;form.elements.client.value=client;form.elements.unit.value=unit;
+ $('#device-form-title').textContent=kind==='windows'?'Cadastrar máquina Windows':'Cadastrar máquina Linux';
+ form.scrollIntoView({behavior:'smooth',block:'center'});form.elements.name.focus();
+ toast('Preencha nome, IP, cliente e unidade. Após salvar, gere a chave individual e baixe o coletor no card do dispositivo.');
+}
+$('#register-windows-host').onclick=()=>registerCollectorHost('windows');
+$('#register-linux-host').onclick=()=>registerCollectorHost('linux');
