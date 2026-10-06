@@ -1,5 +1,5 @@
-# Multipla Siem 1.2.10
+# Multipla Siem 1.2.11
 
-Melhora o visual do terminal SSH com fonte monoespaçada, tamanho ajustável de 12 a 20 px, maior espaçamento, paleta ANSI, cursor piscante e controle Expandir/Recolher. O uso de cores depende das sequências enviadas pelo equipamento. Não altera configurações do Shell remoto.
+Corrige o corte dos balões de informação dos comandos SSH. Os balões são exibidos fora dos painéis com overflow e sua posição é limitada à área visível da janela, nas bordas laterais e verticais. Funcionam ao passar o mouse ou focar o ícone pelo teclado, e fecham ao sair, rolar, redimensionar ou pressionar Escape.
 
-Validação: prévia interativa no navegador, mudança de fonte e expansão, sintaxe JavaScript, fluxo de confirmação SSH, testes Go e vet.
+Validação: testes de posicionamento em telas estreitas e largas, bordas esquerda/direita e superior/inferior; confirmação SSH; sintaxe JavaScript; testes Go e vet.
