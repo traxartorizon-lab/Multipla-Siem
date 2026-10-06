@@ -1689,7 +1689,7 @@ func main() {
 		return
 	}
 	if *version {
-		fmt.Println("Multipla Siem 1.2.6")
+		fmt.Println("Multipla Siem 1.2.7")
 		return
 	}
 	if *firstBoot {

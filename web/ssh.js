@@ -21,12 +21,12 @@ function renderSSHSelectors(){
  sshCheckboxes($('#ssh-client-options'),clients.map(c=>[c,c]),sshClients,()=>{sshUnits.clear();renderSSHSelectors()});
  const units=[...new Set(devices.filter(d=>!sshClients.size||sshClients.has(d.client)).map(sshUnitKey))].sort();sshUnits=new Set([...sshUnits].filter(u=>units.includes(u)));sshCheckboxes($('#ssh-unit-options'),units.map(u=>[u,u]),sshUnits,renderSSHSelectors);
  sshCheckboxes($('#ssh-device-options'),sshAvailable().map(d=>[d.id,d.client+' / '+d.unit+' · '+d.name+' · '+(d.ssh_user||(d.kind==='pfsense'?'admin':'root'))+'@'+d.ip+':'+(d.ssh_port||22)]),sshSelected,renderSSHSelectionStatus);
- $('#ssh-selection-title').textContent='Selecionar '+(sshKind==='pfsense'?'pfSense':'Proxmox')+' cadastrados';renderSSHSelectionStatus();
+ $('#ssh-selection-title').textContent='Selecionar '+(sshKind==='pfsense'?'pfSense':'Proxmox')+' cadastrados';renderSSHSelectionStatus();renderSSHQuickCatalog();
 }
 function renderSSHSelectionStatus(){const count=sshChosen().length;$('#ssh-selection-status').textContent=count+' equipamentos selecionados. Até quatro terminais simultâneos.';$('#ssh-check-identities').disabled=count<1||count>4}
 document.querySelectorAll('[data-ssh-kind]').forEach(button=>button.onclick=()=>{sshKind=button.dataset.sshKind;sshClients.clear();sshUnits.clear();renderSSHSelectors()});
 $('#ssh-check-identities').onclick=()=>run(async()=>{
- const selected=sshChosen();if(!selected.length||selected.length>4)throw Error('Selecione de um a quatro equipamentos.');const root=$('#ssh-host-identities');root.replaceChildren();
+ const selected=sshChosen();if(!selected.length||selected.length>4)throw Error('Selecione de um a quatro equipamentos.');const failures=[];const root=$('#ssh-host-identities');root.replaceChildren();
  for(const d of selected){
   const card=el('div',undefined,'ssh-host-identity');card.append(el('h3',d.client+' / '+d.unit+' · '+d.name));root.append(card);
   try{const data=await api('/api/ssh/identity','POST',{id:d.id});sshIdentities.set(d.id,data);card.append(el('p',data.identity.fingerprint));
@@ -34,8 +34,9 @@ $('#ssh-check-identities').onclick=()=>run(async()=>{
    else{if(data.previous_fingerprint)card.append(el('p','ATENÇÃO: identificação anterior diferente: '+data.previous_fingerprint));card.append(el('p','Compare esta identificação com a obtida diretamente no equipamento, por um canal confiável.'));
     card.append(action('Confirmar identificação',async()=>{if(!confirm('Você conferiu a identificação SSH de '+d.name+' por um canal confiável?\n'+data.identity.fingerprint))return;await api('/api/ssh/trust','POST',{id:d.id,key:data.identity.key});data.trusted=true;card.append(el('p','Identificação confirmada e salva.'))}));
    }
-  }catch(e){card.append(el('p',e.message))}
+  }catch(e){failures.push(d.name+': '+e.message);card.append(el('p',e.message))}
  }
+ if(failures.length)throw Error(failures.join(' · '));
 });
 function sshEncode(bytes){return btoa(String.fromCharCode(...bytes))}
 function sshDecode(text){return Uint8Array.from(atob(text),c=>c.charCodeAt(0))}
@@ -59,17 +60,27 @@ function createSSHView(data){
  terminal.onData(text=>{const bytes=new TextEncoder().encode(text);for(let i=0;i<bytes.length;i+=4096){const part=bytes.slice(i,i+4096);view.input=view.input.then(()=>api('/api/ssh/sessions/'+encodeURIComponent(view.id)+'/input','POST',{data:sshEncode(part)})).catch(e=>{status.textContent=e.message})}});
  return view;
 }
-$('#ssh-connect-form').onsubmit=e=>{e.preventDefault();run(async()=>{
+$('#ssh-connect-form').onsubmit=async e=>{e.preventDefault();const result=$('#ssh-connect-result'),button=e.target.querySelector('button[type="submit"]')||e.target.querySelector('button');button.disabled=true;result.textContent='Verificando solicitação…';let credential;
+ try{
  const selected=sshChosen();if(!selected.length||selected.length>4)throw Error('Selecione de um a quatro equipamentos.');
- const f=new FormData(e.target),credential={password:String(f.get('password')||''),private_key:String(f.get('private_key')||''),passphrase:String(f.get('passphrase')||'')};
- if(!credential.password&&!credential.private_key)throw Error('Informe a credencial para esta conexão.');e.target.reset();
- try{for(const d of selected){try{const data=await api('/api/ssh/sessions','POST',{id:d.id,...credential});createSSHView(data)}catch(error){toast(d.name+': '+error.message)}}}
- finally{credential.password='';credential.private_key='';credential.passphrase=''}
-})};
+ const f=new FormData(e.target);credential={user:String(f.get('user')||'').trim(),password:String(f.get('password')||''),private_key:String(f.get('private_key')||''),passphrase:String(f.get('passphrase')||'')};
+ if(!credential.password&&!credential.private_key)throw Error('Informe a credencial para esta conexão.');
+ e.target.elements.password.value='';e.target.elements.private_key.value='';e.target.elements.passphrase.value='';
+ const failures=[];let opened=0;
+ for(const d of selected){try{const data=await api('/api/ssh/sessions','POST',{id:d.id,...credential});createSSHView(data);opened++}catch(error){failures.push(d.name+': '+error.message)}}
+ result.textContent=(opened?'Solicitadas '+opened+' conexões. Acompanhe o estado nos terminais abaixo. ':'')+failures.join(' · ');if(failures.length)toast(failures.join(' · '));else toast('Conexão solicitada; aguardando autenticação SSH.');
+ }catch(error){result.textContent=error.message;toast(error.message)}finally{if(credential){credential.password='';credential.private_key='';credential.passphrase=''}button.disabled=false;renderSSHQuickCatalog()}
+};
 async function pollSSHTerminal(view){
  if(view.busy||view.closed)return;view.busy=true;
  try{const data=await api('/api/ssh/sessions/'+encodeURIComponent(view.id)+'?offset='+view.offset);if(data.lost)view.terminal.writeln('\r\n[Parte da saída anterior excedeu o limite do buffer.]');if(data.data)view.terminal.write(sshDecode(data.data));view.offset=data.next;view.status.textContent=data.status==='connected'?'Conectado':data.status==='connecting'?'Conectando…':data.message||'Sessão encerrada';view.terminal.options.disableStdin=data.status!=='connected';if(data.status==='closed')view.closed=true}
  catch(error){view.status.textContent=error.message;view.closed=true;view.terminal.options.disableStdin=true}
- finally{view.busy=false}
+ finally{view.busy=false;renderSSHCatalogTargets()}
 }
 setInterval(()=>{sshViews.forEach(pollSSHTerminal)},500);
+
+function renderSSHCatalogTargets(){const select=$('#ssh-catalog-target');if(!select)return;const old=select.value;select.replaceChildren(new Option('Selecione um terminal conectado',''));for(const view of sshViews.values()){if(!view.closed&&!view.terminal.options.disableStdin){select.append(new Option(view.card.querySelector('h3').textContent,view.id))}}select.value=[...select.options].some(o=>o.value===old)?old:'';$('#ssh-catalog-execute').disabled=!select.value}
+function renderSSHQuickCatalog(){const root=$('#ssh-catalog-buttons');if(!root)return;root.replaceChildren();for(const item of SSH_QUICK_TESTS.filter(test=>!test.kinds||test.kinds.includes(sshKind))){const wrap=el('span',undefined,'ssh-quick-item'),button=el('button',item.name,'secondary'),tip=el('span',item.help+'\nComando: '+item.command,'ssh-command-tooltip');button.type='button';tip.id='ssh-catalog-tip-'+root.children.length;tip.setAttribute('role','tooltip');button.setAttribute('aria-describedby',tip.id);button.onclick=()=>{$('#ssh-catalog-command').value=item.command;$('#ssh-catalog-help').textContent=item.help;$('#ssh-catalog-command').focus()};wrap.append(button,tip);root.append(wrap)}renderSSHCatalogTargets()}
+$('#ssh-catalog-target').onchange=()=>{$('#ssh-catalog-execute').disabled=!$('#ssh-catalog-target').value};
+$('#ssh-catalog-execute').onclick=()=>run(async()=>{const view=sshViews.get($('#ssh-catalog-target').value);if(!view||view.closed||view.terminal.options.disableStdin)throw Error('Selecione um terminal conectado.');const command=$('#ssh-catalog-command').value.trim();if(!command||/[\x00\x1b]/.test(command))throw Error('Informe um comando válido.');const bytes=new TextEncoder().encode(command+'\r');for(let i=0;i<bytes.length;i+=4096){const part=bytes.slice(i,i+4096);view.input=view.input.then(()=>api('/api/ssh/sessions/'+encodeURIComponent(view.id)+'/input','POST',{data:sshEncode(part)}))}await view.input});
+renderSSHQuickCatalog();

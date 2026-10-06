@@ -37,7 +37,7 @@ type manifest struct {
 	UpdaterSize   int64  `json:"updater_size"`
 }
 
-const updaterVersion = "1.2.6"
+const updaterVersion = "1.2.7"
 
 var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 var repoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)

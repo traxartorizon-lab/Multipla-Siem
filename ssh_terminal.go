@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -65,7 +66,7 @@ func probeSSHIdentity(ctx context.Context, d NetworkEquipment) (SSHHostIdentity,
 	}
 	conn, err := sshDial(ctx, sshEquipmentAddress(d))
 	if err != nil {
-		return SSHHostIdentity{}, errors.New("não foi possível alcançar o serviço SSH")
+		return SSHHostIdentity{}, sshReachabilityError(d, err)
 	}
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(8 * time.Second))
@@ -137,7 +138,7 @@ func (t *sshTerminal) close(message string) {
 func (a *App) connectSSHTerminal(ctx context.Context, t *sshTerminal, auth ssh.AuthMethod, key ssh.PublicKey) {
 	conn, err := sshDial(ctx, sshEquipmentAddress(t.equipment))
 	if err != nil {
-		t.close("Não foi possível alcançar o serviço SSH.")
+		t.close(sshReachabilityError(t.equipment, err).Error())
 		return
 	}
 	conn.SetDeadline(time.Now().Add(10 * time.Second))
@@ -299,6 +300,7 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 		}
 		var body struct {
 			ID         string `json:"id"`
+			User       string `json:"user"`
 			Password   string `json:"password"`
 			PrivateKey string `json:"private_key"`
 			Passphrase string `json:"passphrase"`
@@ -314,6 +316,13 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 		if err != nil {
 			http.Error(w, err.Error(), 400)
 			return
+		}
+		if body.User != "" {
+			d.SSHUser = strings.TrimSpace(body.User)
+			if err := validateEquipment(d); err != nil {
+				http.Error(w, "Usuário SSH inválido", 400)
+				return
+			}
 		}
 		var method ssh.AuthMethod
 		if body.PrivateKey != "" {
@@ -451,4 +460,16 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 		t.close("Sessão encerrada pelo operador.")
 		writeJSON(w, map[string]bool{"ok": true})
 	}))
+}
+
+func sshReachabilityError(d NetworkEquipment, err error) error {
+	var detail string
+	if errors.Is(err, context.DeadlineExceeded) {
+		detail = "tempo de conexão esgotado; confira rota, regras de firewall e serviço SSH"
+	} else if e, ok := err.(net.Error); ok && e.Timeout() {
+		detail = "tempo de conexão esgotado; confira rota, regras de firewall e serviço SSH"
+	} else {
+		detail = "conexão recusada ou destino inacessível; confira IP, porta, rota e se o SSH está habilitado"
+	}
+	return fmt.Errorf("Não foi possível alcançar %s: %s. O teste parte do servidor SIEM", sshEquipmentAddress(d), detail)
 }

@@ -1,3 +1,11 @@
+# 1.2.7 — 2026-10-05
+
+- Campo de usuário SSH por conexão, sem modificar o cadastro ou armazenar a senha/chave.
+- Falhas de abertura e identificação ficam visíveis no formulário; não são substituídas por “Operação concluída”.
+- Comandos rápidos e balões informativos disponíveis antes de abrir o terminal, com editor e seleção explícita de uma sessão conectada para executar.
+- Erros de alcance informam o destino cadastrado e que a conexão parte do SIEM, com orientações sobre IP, porta, serviço, rota e firewall.
+- Testes de validação do usuário, preservação do cadastro e ausência de credenciais no estado persistente.
+
 # 1.2.6 — 2026-10-05
 
 - O atualizador e o rollback aguardam até dois minutos pela disponibilidade HTTPS do painel, consultando a cada dois segundos. A validação do certificado e a restauração automática permanecem obrigatórias.

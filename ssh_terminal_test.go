@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"golang.org/x/crypto/ssh"
 	"net"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -61,5 +64,29 @@ func TestSSHOutputBufferBounded(t *testing.T) {
 	n, err := terminal.Write(data)
 	if err != nil || n != len(data) || len(terminal.output) > 1<<20 || terminal.base == 0 {
 		t.Fatal("unbounded SSH output")
+	}
+}
+
+func TestSSHUserOverrideValidatedWithoutSavingCredentials(t *testing.T) {
+	a := testApp(t)
+	a.nativeTLS = true
+	a.demo = false
+	a.state.NetworkEquipment = []NetworkEquipment{{ID: "equipment", Name: "Firewall", IP: "192.0.2.20", Kind: "pfsense", Client: "Customer", Unit: "Unit", SSHUser: "root", SSHPort: 1022}}
+	for _, tc := range []struct {
+		user string
+		code int
+	}{{"bad;name", 400}, {"admin", 409}} {
+		w := httptest.NewRecorder()
+		a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "POST", "/api/ssh/sessions", []byte(`{"id":"equipment","user":"`+tc.user+`","password":"SYNTHETIC_SESSION_SECRET"}`)))
+		if w.Code != tc.code {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	if a.state.NetworkEquipment[0].SSHUser != "root" {
+		t.Fatal("session override persisted")
+	}
+	raw, _ := json.Marshal(a.state)
+	if strings.Contains(string(raw), "SYNTHETIC_SESSION_SECRET") {
+		t.Fatal("credential persisted")
 	}
 }
