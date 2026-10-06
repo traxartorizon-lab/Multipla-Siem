@@ -28,6 +28,7 @@ function renderNetworkResults(){
  const root=$('#network-test-results');root.replaceChildren();const client=$('#network-client').value,unit=$('#network-unit').value;
  networkData.tests.filter(job=>(!client||job.equipment.client===client)&&(!unit||job.equipment.unit===unit)).sort((a,b)=>b.started.localeCompare(a.started)).forEach(job=>{
   const card=el('article',undefined,'panel form-panel'),heading=el('div',undefined,'panel-heading');heading.append(el('h2',job.equipment.client+' / '+job.equipment.unit+' · '+job.equipment.name+' · '+networkNames[job.mode]));
+  if(job.status!=='running'&&snapshot?.role!=='viewer')heading.append(action('Adicionar ao relatório temporário',()=>saveTemporaryTest({type:'network',id:job.id})));
   if(job.status==='running'&&snapshot?.role!=='viewer')heading.append(action('Interromper',async()=>{await api('/api/network/tests/'+encodeURIComponent(job.id)+'/stop','POST',{});await renderNetwork()}));
   card.append(heading,el('p',networkStatuses[job.status]+' · '+job.equipment.ip+' · iniciado '+date(job.started)),el('pre',(job.output||[]).join('\n')||'Aguardando resposta…','network-output'));root.append(card);
  });

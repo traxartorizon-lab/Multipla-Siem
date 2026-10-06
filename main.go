@@ -102,6 +102,7 @@ type Audit struct {
 	Action string    `json:"action"`
 }
 type State struct {
+	TemporaryReports  []TemporaryReport          `json:"temporary_reports,omitempty"`
 	PFSourceMigration bool                       `json:"pf_source_migration,omitempty"`
 	SSHHostKeys       map[string]SSHHostIdentity `json:"ssh_host_keys,omitempty"`
 	NetworkEquipment  []NetworkEquipment         `json:"network_equipment,omitempty"`
@@ -1163,6 +1164,8 @@ func (a *App) routes() http.Handler {
 	a.registerReportRoutes(mux)
 	a.registerNetworkRoutes(mux)
 	a.registerSSHRoutes(mux)
+	a.registerDHCPRoutes(mux)
+	a.registerTemporaryReportRoutes(mux)
 	a.registerLocalAuth(mux)
 	a.registerGoogleSettings(mux)
 	a.registerReceiverRoutes(mux)
@@ -1184,10 +1187,10 @@ func (a *App) routes() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(b)
 	})
-	for _, path := range []string{"style.css", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "xterm.js", "xterm.css"} {
+	for _, path := range []string{"style.css", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
 		p := path
 		mux.HandleFunc("GET /"+p, func(w http.ResponseWriter, r *http.Request) {
-			if p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" || p == "dashboard.js" || p == "reports.js" || p == "network.js" || p == "ssh.js" || p == "xterm.js" {
+			if p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" || p == "dashboard.js" || p == "reports.js" || p == "network.js" || p == "ssh.js" || p == "dhcp.js" || p == "test-reports.js" || p == "xterm.js" {
 				w.Header().Set("Content-Type", "text/javascript")
 			} else {
 				w.Header().Set("Content-Type", "text/css")
@@ -1694,7 +1697,7 @@ func main() {
 		return
 	}
 	if *version {
-		fmt.Println("Multipla Siem 1.2.12")
+		fmt.Println("Multipla Siem 1.2.13")
 		return
 	}
 	if *firstBoot {
@@ -1756,6 +1759,7 @@ func main() {
 	go a.localAIWorker()
 	go a.devicePresenceWorker()
 	go a.backupScheduler()
+	go a.temporaryReportCleaner()
 	go a.mailWorker()
 	go a.webhookWorker()
 	go a.snmpWorker()
