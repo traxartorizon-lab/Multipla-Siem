@@ -30,6 +30,32 @@ dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);bo
 
 .ssh-command-form{display:grid;gap:12px;margin-top:16px}.ssh-command-form label{display:grid;gap:6px}.ssh-command-form textarea{font-family:monospace}.ssh-command-form button{justify-self:start}
 
-.ssh-quick-buttons{display:flex;flex-wrap:wrap;gap:10px}.ssh-quick-item{position:relative;display:inline-flex}.ssh-command-tooltip{display:none;position:absolute;left:0;bottom:calc(100% + 8px);width:min(360px,75vw);padding:12px;border:1px solid var(--accent);border-radius:8px;background:#15222f;color:#e4edf4;z-index:20;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.5;box-shadow:0 6px 20px #0008}.ssh-quick-item:hover .ssh-command-tooltip,.ssh-quick-item:focus-within .ssh-command-tooltip{display:block}
+.ssh-quick-buttons{display:flex;flex-wrap:wrap;gap:10px}.ssh-quick-item{position:relative;display:inline-flex}.ssh-command-tooltip{display:none;position:absolute;left:0;bottom:calc(100% + 8px);width:min(360px,75vw);padding:12px;border:1px solid var(--accent);border-radius:8px;background:#15222f;color:#e4edf4;z-index:20;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.5;box-shadow:0 6px 20px #0008}.ssh-info-wrap:hover .ssh-command-tooltip,.ssh-info-wrap:focus-within .ssh-command-tooltip{display:block}
 
 .event-critical-row>td{background:rgba(239,68,68,.09)}.event-critical-row>td:first-child{border-left:3px solid #ef4444}.event-critical-row .badge.critical{color:#ffb4b4;background:#65252b;border:1px solid #ef6666}.event-critical-row:hover>td{background:rgba(239,68,68,.16)}
+
+/* Catálogo SSH: escolha do teste separada da revisão e execução. */
+.ssh-quick-buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:20px 0 24px}
+.ssh-quick-item{display:flex;min-width:0}
+.ssh-quick-item>button{width:100%;min-height:56px;text-align:left;white-space:normal;line-height:1.5;padding:14px 16px}
+.ssh-catalog-editor{display:grid;gap:14px;border-top:1px solid var(--line);padding-top:22px}
+.ssh-catalog-editor h3,.ssh-catalog-editor p{margin:0}
+.ssh-catalog-editor label{display:grid;gap:8px}
+.ssh-catalog-editor textarea{font-family:monospace;line-height:1.6;resize:vertical;min-height:100px}
+.ssh-catalog-editor>button{justify-self:start}
+#ssh-catalog-help{padding:12px 14px;background:#0b1219;border-radius:8px;line-height:1.6}
+#ssh-catalog-help:empty{display:none}
+.ssh-quick-item>button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media(max-width:600px){.ssh-quick-buttons{grid-template-columns:1fr}.ssh-catalog-editor>button{width:100%}}
+
+.ssh-terminal-card{padding:18px;overflow:hidden}.ssh-terminal-card .panel-heading{align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}.ssh-terminal-card .panel-heading h3{flex:1;margin:0;min-width:200px}.ssh-terminal-card>p{margin:10px 0;line-height:1.5}
+.ssh-terminal-screen{min-height:390px;border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto}.ssh-terminal-screen:focus-within{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.ssh-terminal-screen .xterm{font-family:monospace}.ssh-terminal-tools{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}.ssh-terminal-tools summary{cursor:pointer;color:var(--accent);font-weight:600}
+.ssh-trust-dialog{width:min(560px,calc(100vw - 32px));padding:24px;border:1px solid var(--line);border-radius:12px;background:#121c27;color:#e4edf4}.ssh-trust-dialog::backdrop{background:#000b}.ssh-trust-dialog p{line-height:1.6}.ssh-trust-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:14px;background:#0b1219;border-radius:8px}.ssh-trust-dialog .toolbar{display:flex;gap:12px;justify-content:flex-end;margin-top:22px}
+
+.ssh-quick-item{align-items:center;gap:8px}.ssh-quick-item>button{flex:1;width:auto}
+.ssh-info-wrap{position:relative;display:inline-flex;flex:0 0 auto}
+.ssh-command-info{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;min-height:0;padding:0;border-radius:50%;border:1px solid var(--accent);background:transparent;color:var(--accent);font-family:serif;font-size:15px;font-weight:bold;cursor:help}
+.ssh-command-info:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.ssh-info-wrap .ssh-command-tooltip{left:auto;right:0;bottom:calc(100% + 8px);width:min(360px,75vw)}
+#ssh-catalog-help,.ssh-command-form>p:empty{display:none}
