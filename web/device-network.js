@@ -9,10 +9,17 @@ function appendDeviceNetworkActions(card,d){
  };card.append(inspect);
  const wake=el('button','Wake-on-LAN','secondary');wake.type='button';wake.disabled=!d.mac||!d.wol_target;wake.title=wake.disabled?'Cadastre MAC e destino de envio para habilitar':'Enviar pacote Wake-on-LAN';wake.onclick=()=>run(async()=>{if(!confirm('Enviar Wake-on-LAN para '+d.name+'?'))return;const res=await api('/api/devices/network','POST',{ip:d.ip,action:'wake'});toast(res.result)});card.append(wake);
 }
-$('#server-reboot').onclick=async()=>{
- const response=prompt('O painel e a coleta serão interrompidos enquanto esta VM reinicia. Digite REINICIAR para confirmar.');if(response!=='REINICIAR')return;
- const button=$('#server-reboot');button.disabled=true;
- try{await api('/api/system/reboot','POST',{confirm:response});$('#server-reboot-status').textContent='Reinício solicitado. Aguarde e recarregue o painel.'}catch(e){$('#server-reboot-status').textContent=e.message;button.disabled=false}
+let rebootStatusTimer;
+$('#server-reboot').onclick=()=>{
+ const dialog=el('dialog'),form=el('form'),heading=el('h2','Confirmar reinício do servidor'),description=el('p','Esta VM Linux será reiniciada. O painel e a coleta ficarão temporariamente indisponíveis. O tempo de retorno depende do servidor.'),label=el('label','Digite REINICIAR para confirmar'),input=el('input'),cancel=el('button','Cancelar','secondary'),submit=el('button','Confirmar reboot'),feedback=el('p');
+ input.autocomplete='off';input.required=true;input.setAttribute('aria-label','Confirmação de reinício');label.append(input);cancel.type='button';submit.type='submit';submit.disabled=true;input.oninput=()=>submit.disabled=input.value!=='REINICIAR';cancel.onclick=()=>dialog.close();form.append(heading,description,label,cancel,submit,feedback);dialog.append(form);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();input.focus();
+ form.onsubmit=async event=>{
+  event.preventDefault();if(input.value!=='REINICIAR')return;submit.disabled=true;cancel.disabled=true;input.disabled=true;feedback.textContent='Solicitando reinício…';const button=$('#server-reboot'),status=$('#server-reboot-status');button.disabled=true;
+  try{
+   await api('/api/system/reboot','POST',{confirm:'REINICIAR'});dialog.close();const started=Date.now();clearInterval(rebootStatusTimer);
+   const update=()=>{const seconds=Math.floor((Date.now()-started)/1000);status.textContent='Reinício aceito pelo sistema · '+seconds+' segundos decorridos. Aguarde o servidor voltar e recarregue o painel.';if(seconds>=300){clearInterval(rebootStatusTimer);status.textContent+=' Se o painel não retornar, verifique a VM pelo console.'}};update();rebootStatusTimer=setInterval(update,1000);
+  }catch(error){status.textContent='Não foi possível confirmar o reinício: '+error.message+'. Se a conexão caiu, verifique a VM antes de tentar novamente.';feedback.textContent=status.textContent;cancel.disabled=false;input.disabled=false;submit.disabled=false;button.disabled=false}
+ };
 };
 const expandedDashboardAlerts=new Set();
 function renderCompactAlerts(events){
