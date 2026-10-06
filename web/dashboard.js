@@ -1,5 +1,5 @@
 'use strict';
-const dashboardDefaultOrder=['collection','alerts','devices','response','activity','posture','recent-alerts'];
+const dashboardDefaultOrder=['collection','alerts','devices','response','activity','recent-alerts','posture'];
 let dashboardEditing=false,dashboardSaving=false,dashboardDragged=null;
 function normalizeDashboardOrder(order){return [...new Set([...(Array.isArray(order)?order:[]),...dashboardDefaultOrder])].filter(id=>dashboardDefaultOrder.includes(id))}
 function dashboardOrder(){return [...$('#dashboard-grid').children].map(n=>n.dataset.dashboardCard)}

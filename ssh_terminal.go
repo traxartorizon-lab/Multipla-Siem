@@ -170,7 +170,7 @@ func (a *App) connectSSHTerminal(ctx context.Context, t *sshTerminal, auth ssh.A
 	}
 	session.Stdout = t
 	session.Stderr = t
-	if err = session.RequestPty("xterm-256color", 24, 100, ssh.TerminalModes{ssh.ECHO: 1, ssh.TTY_OP_ISPEED: 14400, ssh.TTY_OP_OSPEED: 14400}); err != nil {
+	if err = session.RequestPty("xterm-256color", 28, 100, ssh.TerminalModes{ssh.ECHO: 1, ssh.TTY_OP_ISPEED: 14400, ssh.TTY_OP_OSPEED: 14400}); err != nil {
 		session.Close()
 		client.Close()
 		t.close("O servidor não permitiu um terminal interativo.")
@@ -446,6 +446,43 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 		t.inputMu.Unlock()
 		if err != nil {
 			t.close("Falha ao transmitir a entrada.")
+			http.Error(w, "terminal desconectado", 502)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	}))
+	mux.HandleFunc("POST /api/ssh/sessions/{id}/resize", a.auth(func(w http.ResponseWriter, r *http.Request) {
+		t, ok := a.getSSHTerminal(r)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		var size struct {
+			Cols int `json:"cols"`
+			Rows int `json:"rows"`
+		}
+		if !decode(w, r, &size) {
+			return
+		}
+		if size.Cols < 20 || size.Cols > 400 || size.Rows < 6 || size.Rows > 200 {
+			http.Error(w, "dimensões do terminal inválidas", 400)
+			return
+		}
+		t.mu.Lock()
+		session, client, connected := t.session, t.client, t.status == "connected"
+		t.lastRead = time.Now()
+		t.mu.Unlock()
+		if session == nil || client == nil || !connected {
+			http.Error(w, "terminal desconectado", 409)
+			return
+		}
+		t.inputMu.Lock()
+		timer := time.AfterFunc(5*time.Second, func() { client.Close() })
+		err := session.WindowChange(size.Rows, size.Cols)
+		timer.Stop()
+		t.inputMu.Unlock()
+		if err != nil {
+			t.close("Falha ao redimensionar o terminal.")
 			http.Error(w, "terminal desconectado", 502)
 			return
 		}

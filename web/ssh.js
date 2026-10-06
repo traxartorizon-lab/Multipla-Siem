@@ -63,23 +63,56 @@ function attachSSHInfoTooltip(home,info,tip){
 }
 window.addEventListener('scroll',hideSSHTooltip,true);window.addEventListener('resize',hideSSHTooltip);
 function sshTerminalOptions(){return {cols:100,rows:28,scrollback:2000,cursorBlink:true,cursorStyle:'block',disableStdin:true,fontFamily:'"Cascadia Mono", "Cascadia Code", Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace',fontSize:14,lineHeight:1.2,fontWeight:'400',allowProposedApi:false,theme:{background:'#0d1117',foreground:'#dce5ef',cursor:'#64dfc3',cursorAccent:'#0d1117',selectionBackground:'#35465e',black:'#17212d',red:'#f07883',green:'#83d99e',yellow:'#eccb83',blue:'#83b5f6',magenta:'#cba0ed',cyan:'#73d5dc',white:'#dce5ef',brightBlack:'#7c8b9e',brightRed:'#ff9b9b',brightGreen:'#adf0bd',brightYellow:'#ffe3a0',brightBlue:'#a9cdff',brightMagenta:'#e2bdff',brightCyan:'#a0edf0',brightWhite:'#ffffff'}}}
-function sshAppearanceControls(card,terminal){
+function sshFitDimensions(width,height,cellWidth,cellHeight){
+ if(!Number.isFinite(width)||!Number.isFinite(height)||!Number.isFinite(cellWidth)||!Number.isFinite(cellHeight)||width<=0||height<=0||cellWidth<=0||cellHeight<=0)return null;
+ return {cols:Math.max(20,Math.min(400,Math.floor(width/cellWidth))),rows:Math.max(6,Math.min(200,Math.floor(height/cellHeight)))};
+}
+function sshAutoFit(view,screen){
+ let frame=0,resizeTimer=0,disposed=false;
+ const sync=()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(async()=>{if(disposed||view.closed||view.terminal.options.disableStdin)return;const size={cols:view.terminal.cols,rows:view.terminal.rows},key=size.cols+'x'+size.rows;if(view.remoteSize===key||view.resizeBusy)return;view.resizeBusy=true;let success=false;try{await api('/api/ssh/sessions/'+encodeURIComponent(view.id)+'/resize','POST',size);view.remoteSize=key;success=true}catch(error){view.status.textContent=error.message}finally{view.resizeBusy=false;if(success&&view.remoteSize!==view.terminal.cols+'x'+view.terminal.rows&&!disposed&&!view.closed)sync()}},150)};
+ const fit=()=>{frame=0;if(disposed||view.closed||!screen.isConnected)return;const content=screen.querySelector('.xterm-screen');if(!content)return;const box=content.getBoundingClientRect(),style=getComputedStyle(screen);const width=screen.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)-18,height=screen.clientHeight-parseFloat(style.paddingTop)-parseFloat(style.paddingBottom);const size=sshFitDimensions(width,height,box.width/view.terminal.cols,box.height/view.terminal.rows);if(!size)return;if(size.cols!==view.terminal.cols||size.rows!==view.terminal.rows)view.terminal.resize(size.cols,size.rows);sync()};
+ const schedule=()=>{if(!disposed&&!frame)frame=requestAnimationFrame(fit)};const observer=new ResizeObserver(schedule);observer.observe(screen);const rendered=view.terminal.onRender(schedule);window.addEventListener('resize',schedule);document.fonts?.ready.then(schedule);
+ view.fit=schedule;view.stopFit=()=>{disposed=true;observer.disconnect();rendered.dispose();window.removeEventListener('resize',schedule);cancelAnimationFrame(frame);clearTimeout(resizeTimer)};schedule();
+}
+function sshAppearanceControls(card,terminal,onFit=()=>{}){
  const controls=el('div',undefined,'ssh-terminal-appearance'),label=el('label','Fonte'),size=el('select'),expand=el('button','Expandir','secondary');
- size.setAttribute('aria-label','Tamanho da fonte do terminal');for(const n of [12,14,16,18,20]){const option=el('option',n+' px');option.value=n;size.append(option)}size.value='14';label.append(size);size.onchange=()=>{terminal.options.fontSize=Number(size.value);terminal.focus()};expand.type='button';expand.setAttribute('aria-expanded','false');
- const collapse=()=>{card.classList.remove('ssh-terminal-expanded');expand.textContent='Expandir';expand.setAttribute('aria-expanded','false')};
- expand.onclick=()=>{const expanded=card.classList.toggle('ssh-terminal-expanded');expand.textContent=expanded?'Recolher':'Expandir';expand.setAttribute('aria-expanded',String(expanded));terminal.focus()};
+ size.setAttribute('aria-label','Tamanho da fonte do terminal');for(const n of [12,14,16,18,20]){const option=el('option',n+' px');option.value=n;size.append(option)}size.value='14';label.append(size);size.onchange=()=>{terminal.options.fontSize=Number(size.value);onFit();terminal.focus()};expand.type='button';expand.setAttribute('aria-expanded','false');
+ const collapse=()=>{card.classList.remove('ssh-terminal-expanded');expand.textContent='Expandir';expand.setAttribute('aria-expanded','false');onFit()};
+ expand.onclick=()=>{const expanded=card.classList.toggle('ssh-terminal-expanded');expand.textContent=expanded?'Recolher':'Expandir';expand.setAttribute('aria-expanded',String(expanded));onFit();terminal.focus()};
  card.addEventListener('keydown',e=>{if(e.key==='Escape'&&card.classList.contains('ssh-terminal-expanded')){e.preventDefault();collapse();expand.focus()}},true);controls.append(label,expand);return controls;
 }
+function sshTrackNativeFormatting(view,bytes){
+ const state=view.formatting||(view.formatting={mode:'',params:'',styled:false});
+ for(const b of bytes){
+  if(state.mode==='string'){if(b===7)state.mode='';else if(b===27)state.mode='string-escape';continue}
+  if(state.mode==='string-escape'){state.mode=b===92?'':'string';continue}
+  if(state.mode==='escape'){if(b===91){state.mode='csi';state.params=''}else if([93,80,94,95].includes(b))state.mode='string';else{state.mode='';if(b===99)state.styled=false}continue}
+  if(state.mode==='csi'){if(b>=64&&b<=126){if(b===109)state.styled=!['','0','39'].includes(state.params);state.mode='';state.params=''}else if(state.params.length<80)state.params+=String.fromCharCode(b);else state.styled=true;continue}
+  if(b===27)state.mode='escape';else if(b===155){state.mode='csi';state.params=''}else if([144,157,158,159].includes(b))state.mode='string';
+ }
+ return state;
+}
+function sshDisplayOutput(view,bytes){
+ // Preserve native ANSI and split escape sequences; highlight only neutral ASCII chunks.
+ const previous=view.formatting,neutral=!previous||(!previous.mode&&!previous.styled);
+ sshTrackNativeFormatting(view,bytes);
+ if(!view.highlight||!neutral||bytes.some(b=>b>126||(b<32&&b!==9&&b!==10&&b!==13)))return bytes;
+ const text=String.fromCharCode(...bytes);
+ return text.replace(/(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}|\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b|\b(?:BOOTP\/DHCP|DHCP|ARP)\b|\b[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?\b/g,token=>{
+  let color='90';if(/^(?:[0-9a-f]{2}:){5}/i.test(token))color='95';else if(token.includes('.')){if(token.split('.').length===4){if(token.split('.').some(n=>Number(n)>255))return token;color='96'}}else if(/^(?:BOOTP|DHCP|ARP)/.test(token))color='92';
+  return '\x1b['+color+'m'+token+'\x1b[39m';
+ });
+}
 function createSSHView(data){
- for(const [id,old] of sshViews){if(old.closed){old.terminal.dispose();old.card.remove();sshViews.delete(id)}}
+ for(const [id,old] of sshViews){if(old.closed){old.stopFit?.();old.terminal.dispose();old.card.remove();sshViews.delete(id)}}
  const d=data.equipment,card=el('article',undefined,'panel form-panel ssh-terminal-card'),heading=el('div',undefined,'panel-heading'),status=el('p','Conectando…'),screen=el('div',undefined,'ssh-terminal-screen');
  heading.append(el('h3',d.client+' / '+d.unit+' · '+d.name+' · '+(d.kind==='pfsense'?'pfSense':'Proxmox')));card.append(heading,status,screen);$('#ssh-terminals').append(card);
  const terminal=new Terminal(sshTerminalOptions());terminal.open(screen);
  // Remote servers may print terminal escapes; never grant clipboard access through OSC 52.
  terminal.parser.registerOscHandler(52,()=>true);terminal.parser.registerOscHandler(8,()=>true);
- const view={id:data.id,terminal,status,card,offset:0,busy:false,closed:false,input:Promise.resolve()};sshViews.set(view.id,view);
- const focus=el('button','Focar terminal','secondary');focus.type='button';focus.onclick=()=>terminal.focus();heading.append(sshAppearanceControls(card,terminal),focus);screen.addEventListener('pointerdown',()=>terminal.focus());screen.tabIndex=0;screen.setAttribute('aria-label','Terminal SSH interativo. Clique para digitar.');
- const close=action('Encerrar sessão',async()=>{await api('/api/ssh/sessions/'+encodeURIComponent(view.id)+'/close','POST',{});view.closed=true;view.terminal.options.disableStdin=true;status.textContent='Sessão encerrada.'});heading.append(close);
+ const view={id:data.id,terminal,status,card,offset:0,busy:false,closed:false,highlight:true,input:Promise.resolve()};sshViews.set(view.id,view);sshAutoFit(view,screen);
+ const focus=el('button','Focar terminal','secondary');focus.type='button';focus.onclick=()=>terminal.focus();heading.append(sshAppearanceControls(card,terminal,()=>view.fit()),focus);const highlight=el('input');highlight.type='checkbox';highlight.checked=true;highlight.onchange=()=>view.highlight=highlight.checked;const highlightLabel=el('label',undefined,'check');highlightLabel.append(highlight,el('span','Realçar IPs, MACs e protocolos'));heading.append(highlightLabel);screen.addEventListener('pointerdown',()=>terminal.focus());screen.tabIndex=0;screen.setAttribute('aria-label','Terminal SSH interativo. Clique para digitar.');
+ const close=action('Encerrar sessão',async()=>{await api('/api/ssh/sessions/'+encodeURIComponent(view.id)+'/close','POST',{});view.closed=true;view.stopFit?.();view.terminal.options.disableStdin=true;status.textContent='Sessão encerrada.'});heading.append(close);
  const form=el('form',undefined,'ssh-command-form'),preset=el('select'),empty=el('option','Selecione um teste rápido');empty.value='';preset.append(empty);
  const availableTests=SSH_QUICK_TESTS.filter(item=>!item.kinds||item.kinds.includes(d.kind));
  for(const item of availableTests){const option=el('option',item.name);option.value=item.command;preset.append(option)}
@@ -104,8 +137,8 @@ $('#ssh-connect-form').onsubmit=async e=>{e.preventDefault();const result=$('#ss
 };
 async function pollSSHTerminal(view){
  if(view.busy||view.closed)return;view.busy=true;
- try{const data=await api('/api/ssh/sessions/'+encodeURIComponent(view.id)+'?offset='+view.offset);if(data.lost)view.terminal.writeln('\r\n[Parte da saída anterior excedeu o limite do buffer.]');if(data.data)view.terminal.write(sshDecode(data.data));view.offset=data.next;view.status.textContent=data.status==='connected'?'Conectado':data.status==='connecting'?'Conectando…':data.message||'Sessão encerrada';view.terminal.options.disableStdin=data.status!=='connected';if(data.status==='connected'&&!view.focused){view.focused=true;view.card.scrollIntoView({behavior:'smooth',block:'start'});view.terminal.focus();}if(data.status==='closed')view.closed=true}
- catch(error){view.status.textContent=error.message;view.closed=true;view.terminal.options.disableStdin=true}
+ try{const data=await api('/api/ssh/sessions/'+encodeURIComponent(view.id)+'?offset='+view.offset);if(data.lost)view.terminal.writeln('\r\n[Parte da saída anterior excedeu o limite do buffer.]');if(data.data)view.terminal.write(sshDisplayOutput(view,sshDecode(data.data)));view.offset=data.next;view.status.textContent=data.status==='connected'?'Conectado':data.status==='connecting'?'Conectando…':data.message||'Sessão encerrada';view.terminal.options.disableStdin=data.status!=='connected';if(data.status==='connected')view.fit?.();if(data.status==='connected'&&!view.focused){view.focused=true;view.card.scrollIntoView({behavior:'smooth',block:'start'});view.terminal.focus();}if(data.status==='closed'){view.closed=true;view.stopFit?.()}}
+ catch(error){view.status.textContent=error.message;view.closed=true;view.stopFit?.();view.terminal.options.disableStdin=true}
  finally{view.busy=false;renderSSHCatalogTargets()}
 }
 setInterval(()=>{sshViews.forEach(pollSSHTerminal)},500);

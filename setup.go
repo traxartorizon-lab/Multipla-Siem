@@ -153,7 +153,7 @@ func runSetup() error {
 		if e != nil {
 			return errors.New("IP de dispositivo inválido")
 		}
-		devices = append(devices, Device{kind, ip.Unmap().String(), kind})
+		devices = append(devices, Device{Name: kind, IP: ip.Unmap().String(), Kind: kind})
 	}
 	c.Devices = devices
 	if e = validateConfig(c); e != nil {

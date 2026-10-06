@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -23,6 +24,72 @@ type TemporaryReport struct {
 	Diagnosis      *ModelDiagnosis  `json:"diagnosis,omitempty"`
 }
 
+// Persist extracted evidence independently of the browser and retain the original expiry.
+func (a *App) saveDHCPReport(j *dhcpJob) {
+	j.mu.Lock()
+	previousID := j.reportID
+	item := TemporaryReport{ID: previousID, Owner: j.owner, SourceID: "dhcp:" + j.id, Mode: "dhcp", Equipment: j.equipment, Created: j.started.UTC(), Expires: j.started.UTC().Add(72 * time.Hour), Servers: append([]DHCPServer(nil), j.servers...), Diagnosis: j.diagnosis, Output: j.message}
+	status := j.status
+	j.mu.Unlock()
+	if item.ID == "" {
+		item.ID = token()
+	}
+	item.AnalysisStatus = "Resultado preservado; interpretação local indisponível."
+	if status == "analyzing" {
+		item.AnalysisStatus = "Interpretação local em andamento."
+	}
+	if item.Diagnosis != nil {
+		item.AnalysisStatus = "Interpretação local concluída; hipótese para revisão humana."
+	}
+	a.mu.Lock()
+	err := a.pruneTemporaryReportsLocked(time.Now().UTC())
+	old := a.state.TemporaryReports
+	next := append([]TemporaryReport(nil), old...)
+	index := -1
+	count := 0
+	for i, r := range next {
+		if r.Owner == item.Owner {
+			count++
+			if r.SourceID == item.SourceID {
+				index = i
+				item.ID = r.ID
+				item.Created = r.Created
+				item.Expires = r.Expires
+			}
+		}
+	}
+	if err == nil && !item.Expires.After(time.Now()) {
+		err = fmt.Errorf("teste com mais de três dias")
+	}
+	if err == nil {
+		if index >= 0 {
+			next[index] = item
+		} else if previousID != "" {
+			a.mu.Unlock()
+			return
+		} else if count >= 20 || len(next) >= 64 {
+			err = fmt.Errorf("limite de relatórios temporários; exclua uma entrada")
+		} else {
+			next = append(next, item)
+		}
+		if err == nil {
+			a.state.TemporaryReports = next
+			err = a.persist()
+			if err != nil {
+				a.state.TemporaryReports = old
+			}
+		}
+	}
+	a.mu.Unlock()
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if err != nil {
+		j.reportError = "Falha ao salvar relatório; confira armazenamento e limite de entradas."
+	} else {
+		j.reportID = item.ID
+		j.reportError = ""
+	}
+}
 func (a *App) pruneTemporaryReportsLocked(now time.Time) error {
 	old := a.state.TemporaryReports
 	next := make([]TemporaryReport, 0, len(old))

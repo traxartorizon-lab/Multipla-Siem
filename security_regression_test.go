@@ -59,7 +59,7 @@ func TestSecurityLogQuotaFailClosed(t *testing.T) {
 	a.cfg.MaxDailyMB = 1
 	a.state.Rules = []Rule{{"test", "test", "any", "failed", 1, 60, 10, true, true}}
 	os.WriteFile(a.journalPath(time.Now()), []byte(strings.Repeat("x", 1024*1024)), 0600)
-	a.ingest(Device{"PVE", "192.168.1.2", "proxmox"}, "failed from 198.51.100.1")
+	a.ingest(Device{Name: "PVE", IP: "192.168.1.2", Kind: "proxmox"}, "failed from 198.51.100.1")
 	if a.dropped != 1 || len(a.events) != 0 || len(a.state.Blocks) != 0 || a.storageError == "" {
 		t.Fatal("quota did not stop ingestion and response")
 	}

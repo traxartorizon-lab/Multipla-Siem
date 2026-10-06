@@ -115,7 +115,7 @@ func uploadFullDrive(email, file string) error {
 	if err != nil {
 		return err
 	}
-	meta, _ := json.Marshal(map[string]any{"name": "Multipla-Siem-full-" + time.Now().UTC().Format("20060102-150405") + ".msbk", "mimeType": "application/octet-stream", "appProperties": map[string]string{"product": "multipla-siem-full", "schema": "1", "owner": driveOwner(email)}})
+	meta, _ := json.Marshal(map[string]any{"name": driveBackupFilename(true, time.Now()), "mimeType": "application/octet-stream", "appProperties": map[string]string{"product": "multipla-siem-full", "schema": "1", "owner": driveOwner(email)}})
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}

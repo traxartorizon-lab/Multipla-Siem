@@ -1,13 +1,28 @@
-# Multipla Siem 1.2.13
+# Multipla Siem 1.2.14
 
-Consulta guiada de servidores DHCP por cliente/unidade/pfSense: autenticação SSH por conexão, identidade do servidor confirmada antes da senha, escolha da interface e captura passiva de 15 a 120 segundos. Cards mostram Server-ID/IP observado, origem Ethernet, MAC, possível fabricante OUI local, rede oferecida e quantidade de respostas. O operador decide quais servidores são autorizados; a IA não executa comandos nem aplica bloqueios.
+Corrige a expansão do terminal SSH: a grade do xterm passa a acompanhar largura/altura do painel, mudança de fonte, recolhimento e redimensionamento da janela. Linhas e colunas são sincronizadas com o PTY remoto via SSH window-change. O PTY inicial também usa as mesmas 28 linhas da grade inicial.
 
-Relatórios temporários: adicione resultados de DHCP, ping, traceroute e testes de portas; interpretação pelo Ollama local quando disponível, retenção de 72 horas desde o teste e limpeza automática a cada minuto, inclusive ao iniciar o serviço. Exportação PDF pela impressão do navegador. Relatórios pertencem à conta administrativa que os adicionou. Senhas, chaves SSH, pacotes brutos e saída arbitrária do terminal não são armazenados nos relatórios.
+O ajuste envia somente dimensões numéricas validadas (20–400 colunas, 6–200 linhas), com autenticação, vínculo à conta da sessão, CSRF e limite de tempo. Não envia comandos ou novas credenciais. Observadores são removidos ao encerrar o terminal. A política CSP, a confirmação da identidade e a autenticação SSH permanecem ativas.
 
-Captura limitada a 1.000 pacotes, 2 MiB, duas consultas simultâneas e interface validada. Interrupção fecha a conexão da consulta; watchdog remoto limita a captura. Inferências locais são serializadas, com contexto e prazo limitados, preservando resultados quando o modelo estiver indisponível. Não há pesquisa externa nestas consultas.
+Validação: testes Go e vet, limites e isolamento do endpoint de resize, cálculo de dimensões, expansão/recolhimento/fonte no xterm real em navegador com CSP. Prévia com fonte de 14 px: 104 para 140 colunas ao expandir; 20 px: 98 colunas expandido e 72 recolhido no viewport de teste. Reflow visual confirmado. A validação no pfSense real ocorre após atualizar; quebras explícitas de linha emitidas pelo equipamento são preservadas.
 
-Pré-requisitos: acesso SSH e permissão tcpdump no pfSense; interface Ethernet IPv4 correta. Nmap instalado no SIEM fornece a base OUI local. Modelo escolhido em Configurações; qwen3:4b deve ser baixado no servidor antes da seleção. O serviço não baixa modelos automaticamente.
+Consultas DHCP guiadas passam a salvar evidências automaticamente no servidor assim que a captura termina, antes da interpretação do Ollama, mantendo a retenção original de 72 horas. A conclusão atualiza a mesma entrada; falhas de gravação são informadas na tela. Capturas executadas livremente no terminal não são importadas. A gravação independe de manter o navegador aberto e não armazena senhas ou pacotes brutos.
 
-Validação: testes Go, vet, testes de captura por SSH com servidor sintético, retenção/isolamento de contas/remoção de dados expirados, rejeição de injeção e fuzz do parser; fluxo visual e inclusão no relatório conferidos em navegador com CSP e dados fictícios. A consulta em seu pfSense e o desempenho real do qwen3:4b dependem de validação após atualização.
+Realce técnico opcional da saída ASCII sem formatação nativa: IPs em ciano, MACs em magenta e protocolos ARP/DHCP em verde. As cores não classificam ameaças ou autorização. Saída com sequências ANSI/controle mantém seus bytes originais; sequências divididas entre leituras e estilos nativos ativos são preservados; o realce volta somente em texto ASCII neutro. Não há HTML de origem remota ou alteração dos comandos enviados.
 
-A retenção remove entradas do armazenamento ativo; PDFs exportados e cópias existentes de backups completos preservam seus próprios arquivos.
+
+
+Dashboard compacta: gráfico em rosca com logs originais por dispositivo nas últimas 24 horas, leitura do histórico com cache de um minuto e indicação de dados parciais. Atividade recente mantém os últimos 30 minutos. Alertas resumidos têm área de rolagem interna limitada e detalhes expansíveis; expansão e posição de leitura são mantidas nas atualizações. Cards continuam móveis por conta.
+
+Dispositivos: tipo PC Windows, cliente/unidade, MAC e destino Wake-on-LAN. Ação manual administrativa UDP 9 sem confirmação fictícia de boot. Consultas limitadas de DNS reverso, vizinhança local, portas TCP selecionadas e compartilhamentos SMB anônimos (SMB2/3); sem senha, shell ou destino arbitrário. Utilitários opcionais: nmap, smbclient e iproute2.
+
+Reinício desta VM exclusivo de administrador, confirmação digitada, CSRF e auditoria. Continua sem root/sudo; política restrita login1 exige habilitação explícita como root após atualizar: multipla-siem -enable-server-reboot. Requer polkit instalado. Não reinicia outras máquinas.
+
+Coletor Windows: métricas atuais de CPU, memória, discos e bytes/s de rede, envio HTTPS a cada minuto, validação TLS e sem redirects. Chave individual revogável e somente para ingestão daquele PC; servidor armazena hash, PC usa DPAPI e ACL restrita. Tarefa LocalService sem privilégios administrativos, sem portas de entrada, execução remota ou alteração de antivírus. Arquivo PowerShell legível, sem bypass/obfuscação. Download autenticado pelo card; instalação exige administrador. A assinatura Ed25519 da versão não é assinatura Authenticode do script.
+
+Validação: testes Go/vet e casos de privilégio, TLS obrigatório, isolamento de chaves, revogação, retenção, janela do gráfico e validação de MAC/percentuais. Sintaxe PowerShell validada sem instalar o coletor nesta estação. UI integrada conferida com dados fictícios. O coletor ainda exige teste piloto em Windows com a política Bitdefender da organização; compatibilidade universal e ausência de falhas não são garantidas. CPU/memória/IO de outras plataformas via SNMP não fazem parte deste coletor Windows; não há série histórica longa de métricas nesta versão.
+
+Nomes de novos backups no Drive passam a usar a versão do arquivo VERSION, com indicação config/full. Documentos JSON e saída -version usam a mesma origem. Backups existentes não são renomeados; schema de restauração permanece compatível. Ajuda de Gmail ampliada em Configurações.
+
+
+Coletor Linux: selecione Linux no cadastro e baixe o instalador no card do dispositivo. Execute `sudo bash ./linux-collector-install.sh`; informe HTTPS, IP cadastrado e chave individual. Requer Python 3.8+ e systemd 247+ (Debian 12/13, Ubuntu 22.04/24.04; outras distribuições precisam de validação). A coleta roda como usuário dinâmico restrito, sem portas de entrada, com credenciais temporárias do systemd, TLS validado e redirecionamentos bloqueados. CPU/memória/rede via /proc e discos locais de sistemas de arquivos suportados. Revogue a chave no SIEM; `sudo bash ./linux-collector-install.sh --uninstall` desativa o timer e preserva arquivos para revisão. Validar a primeira instalação em uma máquina piloto.

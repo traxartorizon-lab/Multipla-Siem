@@ -116,7 +116,7 @@ func TestDHCPSSHExecReturnsStructuredEvidenceWithoutCredential(t *testing.T) {
 	a := testApp(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	job := &dhcpJob{id: "synthetic", owner: "admin@gmail.com", status: "capturing", cancel: cancel}
+	job := &dhcpJob{id: "synthetic", owner: "admin@gmail.com", started: time.Now().UTC(), status: "capturing", cancel: cancel}
 	terminal := &sshTerminal{client: client, status: "connected"}
 	command, err := dhcpCaptureCommand("igb1", 15)
 	if err != nil {
@@ -128,6 +128,9 @@ func TestDHCPSSHExecReturnsStructuredEvidenceWithoutCredential(t *testing.T) {
 		t.Fatal(job.status, job.message, job.servers)
 	}
 	sent := <-commands
+	if job.reportID == "" || len(a.state.TemporaryReports) != 1 || job.reportError != "" {
+		t.Fatal("guided capture was not automatically saved", job.reportError)
+	}
 	if sent != command || strings.Contains(sent, "SYNTHETIC_ONLY_SECRET") {
 		t.Fatal("unexpected command or credential exposure")
 	}

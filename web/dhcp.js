@@ -8,6 +8,7 @@ $('#ssh-catalog-buttons').closest('article').before(dhcpPanel);
 function dhcpField(title,input){const label=el('label',title);label.append(input);return label;}
 function renderDHCPResult(root,data){
  root.replaceChildren();root.append(el('p',data.message||({capturing:'Observando respostas DHCP…',analyzing:'Interpretando os dados no Ollama local…'}[data.status]||data.status),'dhcp-status'));
+ if(data.report_error)root.append(el('p',data.report_error,'dhcp-caution'));else if(data.report_id)root.append(el('p','Resultado salvo automaticamente em Relatórios temporários de testes.'));
  const grid=el('div',undefined,'dhcp-result-grid');root.append(grid);
  for(const server of data.servers||[]){
   const card=el('article',undefined,'dhcp-server-card');card.append(el('h3','Servidor observado · '+server.ip,'dhcp-ip'));
@@ -43,7 +44,7 @@ dhcpLaunch.onclick=async()=>{
    }else{
     const job=await api('/api/ssh/sessions/'+sessionID+'/dhcp','POST',{interface:iface.value,seconds:Number(duration.value)});jobID=encodeURIComponent(job.id);iface.disabled=duration.disabled=true;submit.hidden=true;cancel.textContent='Interromper consulta';renderDHCPResult(dhcpResult,job);
     let polling=false;pollTimer=setInterval(async()=>{if(polling||closed)return;polling=true;try{const data=await api('/api/ssh/sessions/'+sessionID+'/dhcp/'+jobID);renderDHCPResult(dhcpResult,data);status.textContent=data.status==='capturing'?'Captura em andamento…':data.status==='analyzing'?'Interpretação local em andamento…':data.message;
-     if(!['capturing','analyzing'].includes(data.status)){clearInterval(pollTimer);pollTimer=null;if(data.status==='completed'){const terminalID=decodeURIComponent(sessionID),savedJobID=decodeURIComponent(jobID);dhcpResult.append(action('Adicionar ao relatório temporário',()=>saveTemporaryTest({type:'dhcp',id:savedJobID,terminal_id:terminalID})))}await api('/api/ssh/sessions/'+sessionID+'/close','POST',{});sessionID='';cancel.textContent='Fechar';dhcpResult.scrollIntoView({behavior:'smooth',block:'start'})}
+     if(!['capturing','analyzing'].includes(data.status)){clearInterval(pollTimer);pollTimer=null;if(data.status==='completed'){const terminalID=decodeURIComponent(sessionID),savedJobID=decodeURIComponent(jobID);if(!data.report_id)dhcpResult.append(action('Tentar salvar no relatório temporário',()=>saveTemporaryTest({type:'dhcp',id:savedJobID,terminal_id:terminalID})))}await api('/api/ssh/sessions/'+sessionID+'/close','POST',{});sessionID='';cancel.textContent='Fechar';dhcpResult.scrollIntoView({behavior:'smooth',block:'start'})}
     }catch(error){status.textContent=error.message;await cleanup();cancel.textContent='Fechar'}finally{polling=false}},1000);
    }
   }catch(error){status.textContent=error.message;await cleanup();cancel.textContent='Fechar'}finally{if(credential)credential.password='';password.value='';busy=false;submit.disabled=closed||!!jobID}

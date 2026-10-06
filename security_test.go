@@ -139,7 +139,7 @@ func TestSecurityRedactionBeforePersistence(t *testing.T) {
 	known := strings.Repeat("private-seed-", 5)
 	t.Setenv("GOOGLE_CLIENT_SECRET", known)
 	raw := `Failed password from 198.51.100.9 password="secret with spaces" api_key=secret-api token=generic-token secret=generic-secret Authorization: Bearer leaked.token.value {"refresh_token":"refresh-value"} /feeds/pfsense/private-feed-token ` + known
-	a.ingest(Device{"PVE", "192.168.1.2", "proxmox"}, raw)
+	a.ingest(Device{Name: "PVE", IP: "192.168.1.2", Kind: "proxmox"}, raw)
 	b, e := os.ReadFile(a.journalPath(time.Now()))
 	if e != nil {
 		t.Fatal(e)

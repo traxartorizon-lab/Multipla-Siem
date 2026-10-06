@@ -29,6 +29,7 @@ type DHCPServer struct {
 	Responses int    `json:"responses"`
 }
 type dhcpJob struct {
+	reportID, reportError                  string
 	mu                                     sync.Mutex
 	id, terminalID, owner, status, message string
 	equipment                              NetworkEquipment
@@ -245,7 +246,7 @@ func dhcpVendor(mac string) string {
 func dhcpJobSnapshot(j *dhcpJob) map[string]any {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	return map[string]any{"id": j.id, "status": j.status, "message": j.message, "servers": j.servers, "diagnosis": j.diagnosis}
+	return map[string]any{"id": j.id, "status": j.status, "message": j.message, "servers": j.servers, "diagnosis": j.diagnosis, "report_id": j.reportID, "report_error": j.reportError}
 }
 func dhcpRemoteInterfaces(ctx context.Context, t *sshTerminal) ([]string, error) {
 	select {
@@ -285,6 +286,12 @@ func dhcpRemoteInterfaces(ctx context.Context, t *sshTerminal) ([]string, error)
 	return out, nil
 }
 func (a *App) runDHCP(ctx context.Context, j *dhcpJob, t *sshTerminal, command string) {
+	evidenceReady := false
+	defer func() {
+		if evidenceReady {
+			a.saveDHCPReport(j)
+		}
+	}()
 	defer func() { <-dhcpSlots; j.cancel() }()
 	finish := func(status, message string) { j.mu.Lock(); j.status = status; j.message = message; j.mu.Unlock() }
 	t.mu.Lock()
@@ -335,6 +342,8 @@ func (a *App) runDHCP(ctx context.Context, j *dhcpJob, t *sshTerminal, command s
 	j.status = "analyzing"
 	j.message = "Captura concluída; preparando interpretação local."
 	j.mu.Unlock()
+	evidenceReady = true
+	a.saveDHCPReport(j)
 	if len(servers) == 0 {
 		finish("completed", "Nenhuma resposta DHCP observada nesta janela. Isso não comprova ausência de servidores.")
 		return

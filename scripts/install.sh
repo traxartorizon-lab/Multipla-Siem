@@ -22,6 +22,7 @@ if [ ! -f /etc/multipla-siem/update.json ]; then
  install -m 0600 -o root -g root update.example.json /etc/multipla-siem/update.json
 fi
 install -m 0755 "$binary" /usr/local/bin/multipla-siem
+# Reboot requires explicit root activation: multipla-siem -enable-server-reboot
 install -d -m 0755 /usr/local/lib/multipla-siem
 install -m 0755 "dist/multipla-update-linux-$arch" /usr/local/lib/multipla-siem/updater
 install -m 0755 scripts/multipla-update /usr/local/sbin/multipla-update

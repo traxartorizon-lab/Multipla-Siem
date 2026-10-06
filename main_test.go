@@ -16,7 +16,7 @@ import (
 func testApp(t *testing.T) *App {
 	t.Helper()
 	dir := t.TempDir()
-	c := Config{Listen: "127.0.0.1:8080", Syslog: "127.0.0.1:5514", PublicURL: "http://127.0.0.1:8080", DataDir: dir, RetentionDays: 7, BlockMinutes: 60, MailMinLevel: 10, AllowedEmails: []string{"admin@gmail.com"}, Devices: []Device{{"Firewall", "192.168.1.1", "pfsense"}}}
+	c := Config{Listen: "127.0.0.1:8080", Syslog: "127.0.0.1:5514", PublicURL: "http://127.0.0.1:8080", DataDir: dir, RetentionDays: 7, BlockMinutes: 60, MailMinLevel: 10, AllowedEmails: []string{"admin@gmail.com"}, Devices: []Device{{Name:"Firewall", IP:"192.168.1.1", Kind:"pfsense"}}}
 	path := filepath.Join(dir, "config.json")
 	if e := atomicJSON(path, c); e != nil {
 		t.Fatal(e)
@@ -145,7 +145,7 @@ func TestSourceParsing(t *testing.T) {
 }
 func TestCorrelationAndDurableReplay(t *testing.T) {
 	a := testApp(t)
-	d := Device{"Proxmox", "192.168.1.10", "proxmox"}
+	d := Device{Name: "Proxmox", IP: "192.168.1.10", Kind: "proxmox"}
 	for i := 0; i < 4; i++ {
 		a.ingest(d, "Failed password from 203.0.113.22")
 	}
@@ -263,7 +263,7 @@ func TestRuleValidationAndWindow(t *testing.T) {
 	a.state.Rules = []Rule{{"test", "test", "any", "failed", 2, 60, 10, false, true}}
 	key := "test|192.168.1.10|"
 	a.counters[key] = bucket{Times: []time.Time{time.Now().Add(-time.Hour)}}
-	a.ingest(Device{"Proxmox", "192.168.1.10", "proxmox"}, "failed")
+	a.ingest(Device{Name: "Proxmox", IP: "192.168.1.10", Kind: "proxmox"}, "failed")
 	for _, e := range a.events {
 		if e.Alert {
 			t.Fatal("expired event correlated")
@@ -296,7 +296,7 @@ func TestStorageFailureDoesNotBlock(t *testing.T) {
 	a := testApp(t)
 	a.state.Rules = []Rule{{"test", "test", "any", "failed", 1, 60, 10, true, true}}
 	a.cfg.DataDir = filepath.Join(a.cfg.DataDir, "missing", "child")
-	a.ingest(Device{"PVE", "192.168.1.10", "proxmox"}, "failed from 198.51.100.3")
+	a.ingest(Device{Name: "PVE", IP: "192.168.1.10", Kind: "proxmox"}, "failed from 198.51.100.3")
 	if len(a.state.Blocks) != 0 || len(a.events) != 0 || a.dropped != 1 {
 		t.Fatal("blocked without durable event")
 	}

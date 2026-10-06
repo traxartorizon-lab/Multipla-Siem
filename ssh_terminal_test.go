@@ -13,6 +13,35 @@ import (
 	"time"
 )
 
+func TestSSHResizeValidatesDimensionsAndSessionOwnership(t *testing.T) {
+	a := testApp(t)
+	a.sshTerminals = map[string]*sshTerminal{"resize-test": {owner: "admin@gmail.com", status: "closed"}}
+	for _, body := range []string{`{"cols":0,"rows":24}`, `{"cols":401,"rows":24}`, `{"cols":100,"rows":201}`, `{"cols":100,"rows":5}`, `{"cols":100,"rows":24,"command":"id"}`, `{"cols":99.5,"rows":24}`} {
+		w := httptest.NewRecorder()
+		a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "POST", "/api/ssh/sessions/resize-test/resize", []byte(body)))
+		if w.Code != 400 {
+			t.Fatalf("%s: %d", body, w.Code)
+		}
+	}
+	w := httptest.NewRecorder()
+	a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "POST", "/api/ssh/sessions/resize-test/resize", []byte(`{"cols":150,"rows":40}`)))
+	if w.Code != 409 {
+		t.Fatal(w.Code)
+	}
+	a.sshTerminals["resize-test"].owner = "other@gmail.com"
+	w = httptest.NewRecorder()
+	a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "POST", "/api/ssh/sessions/resize-test/resize", []byte(`{"cols":150,"rows":40}`)))
+	if w.Code != 404 {
+		t.Fatal("cross-account resize", w.Code)
+	}
+	a.state.Accounts = map[string]AccessAccount{"admin@gmail.com": {Role: "viewer"}}
+	w = httptest.NewRecorder()
+	a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "POST", "/api/ssh/sessions/resize-test/resize", []byte(`{"cols":150,"rows":40}`)))
+	if w.Code != 403 {
+		t.Fatal("viewer resize", w.Code)
+	}
+}
+
 func TestSSHProbeObtainsHostIdentityWithoutCredentials(t *testing.T) {
 	_, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

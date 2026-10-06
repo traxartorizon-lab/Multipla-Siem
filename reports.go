@@ -18,6 +18,7 @@ import (
 var reportSlots = make(chan struct{}, 2)
 
 type reportFilter struct {
+	cutoff   time.Time
 	Start    string `json:"start"`
 	End      string `json:"end"`
 	Device   string `json:"device"`
@@ -125,6 +126,9 @@ func (a *App) buildReport(r *http.Request, filter reportFilter, start, end time.
 				continue
 			}
 			if event.Time.Before(start) || !event.Time.Before(end.AddDate(0, 0, 1)) {
+				continue
+			}
+			if !filter.cutoff.IsZero() && (event.Time.Before(filter.cutoff) || event.Time.After(time.Now())) {
 				continue
 			}
 			result.Scanned++

@@ -182,7 +182,7 @@ func (a *App) uploadDriveBackup(email string, data []byte) error {
 	}
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	meta, _ := json.Marshal(map[string]any{"name": "Multipla-Siem-1.1-" + time.Now().UTC().Format("20060102-150405") + ".json", "mimeType": "application/json", "appProperties": map[string]string{"product": "multipla-siem", "schema": "1", "owner": driveOwner(email)}})
+	meta, _ := json.Marshal(map[string]any{"name": driveBackupFilename(false, time.Now()), "mimeType": "application/json", "appProperties": map[string]string{"product": "multipla-siem", "schema": "1", "owner": driveOwner(email)}})
 	header := textproto.MIMEHeader{}
 	header.Set("Content-Type", "application/json; charset=UTF-8")
 	part, e := writer.CreatePart(header)

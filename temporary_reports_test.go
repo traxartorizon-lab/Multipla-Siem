@@ -8,6 +8,35 @@ import (
 	"time"
 )
 
+func TestAutomaticDHCPReportUpdatesWithoutExtendingRetention(t *testing.T) {
+	a := testApp(t)
+	j := &dhcpJob{id: "automatic", owner: "admin@gmail.com", started: time.Now().UTC(), status: "analyzing", servers: []DHCPServer{{IP: "192.168.10.1"}}}
+	a.saveDHCPReport(j)
+	if j.reportID == "" || j.reportError != "" || len(a.state.TemporaryReports) != 1 {
+		t.Fatal("not persisted", j.reportError)
+	}
+	first := a.state.TemporaryReports[0]
+	if first.Expires.Sub(first.Created) != 72*time.Hour {
+		t.Fatal("retention")
+	}
+	j.status = "completed"
+	j.message = "Consulta concluída"
+	a.saveDHCPReport(j)
+	if len(a.state.TemporaryReports) != 1 || a.state.TemporaryReports[0].ID != first.ID || !a.state.TemporaryReports[0].Expires.Equal(first.Expires) || a.state.TemporaryReports[0].Output != j.message {
+		t.Fatal("update duplicated or extended report")
+	}
+	a.state.TemporaryReports = nil
+	a.saveDHCPReport(j)
+	if len(a.state.TemporaryReports) != 0 {
+		t.Fatal("deleted report recreated")
+	}
+	j = &dhcpJob{id: "expired", owner: "admin@gmail.com", started: time.Now().Add(-73 * time.Hour)}
+	a.saveDHCPReport(j)
+	if j.reportError == "" || len(a.state.TemporaryReports) != 0 {
+		t.Fatal("expired capture accepted")
+	}
+}
+
 func TestTemporaryReportRetentionAndAccountBoundary(t *testing.T) {
 	a := testApp(t)
 	now := time.Now().UTC()

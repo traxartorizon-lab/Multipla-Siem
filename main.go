@@ -35,9 +35,13 @@ import (
 var assets embed.FS
 
 type Device struct {
-	Name string `json:"name"`
-	IP   string `json:"ip"`
-	Kind string `json:"kind"`
+	MAC       string `json:"mac,omitempty"`
+	WOLTarget string `json:"wol_target,omitempty"`
+	Client    string `json:"client,omitempty"`
+	Unit      string `json:"unit,omitempty"`
+	Name      string `json:"name"`
+	IP        string `json:"ip"`
+	Kind      string `json:"kind"`
 }
 type Config struct {
 	SNMP          string   `json:"snmp"`
@@ -102,6 +106,8 @@ type Audit struct {
 	Action string    `json:"action"`
 }
 type State struct {
+	MetricKeys        map[string]string          `json:"metric_keys,omitempty"`
+	DeviceMetrics     map[string]DeviceTelemetry `json:"device_metrics,omitempty"`
 	TemporaryReports  []TemporaryReport          `json:"temporary_reports,omitempty"`
 	PFSourceMigration bool                       `json:"pf_source_migration,omitempty"`
 	SSHHostKeys       map[string]SSHHostIdentity `json:"ssh_host_keys,omitempty"`
@@ -231,8 +237,11 @@ func validateConfig(c Config) error {
 	names := map[string]bool{}
 	for _, d := range c.Devices {
 		ip, e := netip.ParseAddr(d.IP)
-		if e != nil || ip.String() != d.IP || ips[d.IP] || names[d.Name] || d.Name == "" || len(d.Name) > 80 || strings.ContainsAny(d.Name, "\r\n\x00") || (d.Kind != "pfsense" && d.Kind != "proxmox" && d.Kind != "generic" && d.Kind != "unifi") {
+		if e != nil || ip.String() != d.IP || ips[d.IP] || names[d.Name] || d.Name == "" || len(d.Name) > 80 || strings.ContainsAny(d.Name, "\r\n\x00") || (d.Kind != "linux" && d.Kind != "windows" && d.Kind != "pfsense" && d.Kind != "proxmox" && d.Kind != "generic" && d.Kind != "unifi") {
 			return errors.New("dispositivo inválido ou IP duplicado")
+		}
+		if err := validateDeviceNetwork(d); err != nil {
+			return err
 		}
 		ips[d.IP] = true
 		names[d.Name] = true
@@ -1035,7 +1044,7 @@ func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
 		role := a.roleLocked(s.Email)
 
 		a.mu.Unlock()
-		if role != "admin" && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && !(r.Method == "PUT" && r.URL.Path == "/api/dashboard/layout") && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export" && r.URL.Path != "/api/events/history" && r.URL.Path != "/api/reports" && r.URL.Path != "/api/network")) {
+		if role != "admin" && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && !(r.Method == "PUT" && r.URL.Path == "/api/dashboard/layout") && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export" && r.URL.Path != "/api/events/history" && r.URL.Path != "/api/devices/metrics" && r.URL.Path != "/api/dashboard/distribution" && r.URL.Path != "/api/reports" && r.URL.Path != "/api/network")) {
 			http.Error(w, "Perfil somente visualizacao: operacao nao permitida", 403)
 			return
 		}
@@ -1163,6 +1172,9 @@ func (a *App) routes() http.Handler {
 	a.registerDashboardRoutes(mux)
 	a.registerReportRoutes(mux)
 	a.registerNetworkRoutes(mux)
+	a.registerDeviceNetworkRoutes(mux)
+	a.registerDeviceMetricRoutes(mux)
+	a.registerSystemRoutes(mux)
 	a.registerSSHRoutes(mux)
 	a.registerDHCPRoutes(mux)
 	a.registerTemporaryReportRoutes(mux)
@@ -1370,6 +1382,18 @@ func (a *App) routes() http.Handler {
 		if c.LocalAnalysis != a.cfg.LocalAnalysis {
 			a.analyzer = nil
 		}
+		for _, previous := range a.cfg.Devices {
+			keep := false
+			for _, next := range c.Devices {
+				if next.IP == previous.IP && next.Name == previous.Name {
+					keep = true
+				}
+			}
+			if !keep {
+				delete(a.state.MetricKeys, previous.IP)
+				delete(a.state.DeviceMetrics, previous.IP)
+			}
+		}
 		a.cfg = c
 		a.audit(s.Email, "configuração atualizada")
 		if e := a.persist(); e != nil {
@@ -1569,7 +1593,7 @@ func (a *App) routes() http.Handler {
 			return
 		}
 		for i := 0; i < 6; i++ {
-			a.ingest(Device{"Proxmox demo", "192.168.1.10", "proxmox"}, "sshd: Failed password for root from 198.51.100.42 port 4456 ssh2")
+			a.ingest(Device{Name: "Proxmox demo", IP: "192.168.1.10", Kind: "proxmox"}, "sshd: Failed password for root from 198.51.100.42 port 4456 ssh2")
 		}
 		writeJSON(w, map[string]bool{"ok": true})
 	}))
@@ -1667,7 +1691,15 @@ func main() {
 	replaceServer := flag.Bool("replace-server", false, "confirmar que o servidor original esta desligado")
 	fullSchedule := flag.String("full-backup-schedule", "", "agendar backup completo diario para uma conta Drive")
 	fullLocked := flag.Bool("full-locked", false, "trava interna do backup completo")
+	enableReboot := flag.Bool("enable-server-reboot", false, "instalar política restrita de reinício como root")
 	flag.Parse()
+	if *enableReboot {
+		if err := enableServerReboot(); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("Política restrita de reinício instalada.")
+		return
+	}
 	if *fullBackup || *fullRestore != "" || *fullSchedule != "" {
 		if runtime.GOOS != "linux" || os.Geteuid() != 0 {
 			log.Fatal("backup completo exige root no Debian/Ubuntu")
@@ -1697,7 +1729,7 @@ func main() {
 		return
 	}
 	if *version {
-		fmt.Println("Multipla Siem 1.2.13")
+		fmt.Println("Multipla Siem " + productVersion())
 		return
 	}
 	if *firstBoot {
