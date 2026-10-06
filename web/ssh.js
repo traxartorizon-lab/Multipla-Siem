@@ -48,15 +48,23 @@ async function sshConfirmServer(d,data){
 async function sshEnsureTrusted(d){const data=await api('/api/ssh/identity','POST',{id:d.id});sshIdentities.set(d.id,data);if(data.trusted)return;if(!await sshConfirmServer(d,data))throw Error('Conexão cancelada: identificação não confirmada.');await api('/api/ssh/trust','POST',{id:d.id,key:data.identity.key});}
 function sshEncode(bytes){return btoa(String.fromCharCode(...bytes))}
 function sshDecode(text){return Uint8Array.from(atob(text),c=>c.charCodeAt(0))}
+function sshTerminalOptions(){return {cols:100,rows:28,scrollback:2000,cursorBlink:true,cursorStyle:'block',disableStdin:true,fontFamily:'"Cascadia Mono", "Cascadia Code", Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace',fontSize:14,lineHeight:1.2,fontWeight:'400',allowProposedApi:false,theme:{background:'#0d1117',foreground:'#dce5ef',cursor:'#64dfc3',cursorAccent:'#0d1117',selectionBackground:'#35465e',black:'#17212d',red:'#f07883',green:'#83d99e',yellow:'#eccb83',blue:'#83b5f6',magenta:'#cba0ed',cyan:'#73d5dc',white:'#dce5ef',brightBlack:'#7c8b9e',brightRed:'#ff9b9b',brightGreen:'#adf0bd',brightYellow:'#ffe3a0',brightBlue:'#a9cdff',brightMagenta:'#e2bdff',brightCyan:'#a0edf0',brightWhite:'#ffffff'}}}
+function sshAppearanceControls(card,terminal){
+ const controls=el('div',undefined,'ssh-terminal-appearance'),label=el('label','Fonte'),size=el('select'),expand=el('button','Expandir','secondary');
+ size.setAttribute('aria-label','Tamanho da fonte do terminal');for(const n of [12,14,16,18,20]){const option=el('option',n+' px');option.value=n;size.append(option)}size.value='14';label.append(size);size.onchange=()=>{terminal.options.fontSize=Number(size.value);terminal.focus()};expand.type='button';expand.setAttribute('aria-expanded','false');
+ const collapse=()=>{card.classList.remove('ssh-terminal-expanded');expand.textContent='Expandir';expand.setAttribute('aria-expanded','false')};
+ expand.onclick=()=>{const expanded=card.classList.toggle('ssh-terminal-expanded');expand.textContent=expanded?'Recolher':'Expandir';expand.setAttribute('aria-expanded',String(expanded));terminal.focus()};
+ card.addEventListener('keydown',e=>{if(e.key==='Escape'&&card.classList.contains('ssh-terminal-expanded')){e.preventDefault();collapse();expand.focus()}},true);controls.append(label,expand);return controls;
+}
 function createSSHView(data){
  for(const [id,old] of sshViews){if(old.closed){old.terminal.dispose();old.card.remove();sshViews.delete(id)}}
  const d=data.equipment,card=el('article',undefined,'panel form-panel ssh-terminal-card'),heading=el('div',undefined,'panel-heading'),status=el('p','Conectando…'),screen=el('div',undefined,'ssh-terminal-screen');
  heading.append(el('h3',d.client+' / '+d.unit+' · '+d.name+' · '+(d.kind==='pfsense'?'pfSense':'Proxmox')));card.append(heading,status,screen);$('#ssh-terminals').append(card);
- const terminal=new Terminal({cols:100,rows:28,scrollback:2000,cursorBlink:true,cursorStyle:'block',disableStdin:true,theme:{background:'#0b1219',foreground:'#d9e5ef'},fontSize:13,allowProposedApi:false});terminal.open(screen);
+ const terminal=new Terminal(sshTerminalOptions());terminal.open(screen);
  // Remote servers may print terminal escapes; never grant clipboard access through OSC 52.
  terminal.parser.registerOscHandler(52,()=>true);terminal.parser.registerOscHandler(8,()=>true);
  const view={id:data.id,terminal,status,card,offset:0,busy:false,closed:false,input:Promise.resolve()};sshViews.set(view.id,view);
- const focus=el('button','Focar terminal','secondary');focus.type='button';focus.onclick=()=>terminal.focus();heading.append(focus);screen.addEventListener('pointerdown',()=>terminal.focus());screen.tabIndex=0;screen.setAttribute('aria-label','Terminal SSH interativo. Clique para digitar.');
+ const focus=el('button','Focar terminal','secondary');focus.type='button';focus.onclick=()=>terminal.focus();heading.append(sshAppearanceControls(card,terminal),focus);screen.addEventListener('pointerdown',()=>terminal.focus());screen.tabIndex=0;screen.setAttribute('aria-label','Terminal SSH interativo. Clique para digitar.');
  const close=action('Encerrar sessão',async()=>{await api('/api/ssh/sessions/'+encodeURIComponent(view.id)+'/close','POST',{});view.closed=true;view.terminal.options.disableStdin=true;status.textContent='Sessão encerrada.'});heading.append(close);
  const form=el('form',undefined,'ssh-command-form'),preset=el('select'),empty=el('option','Selecione um teste rápido');empty.value='';preset.append(empty);
  const availableTests=SSH_QUICK_TESTS.filter(item=>!item.kinds||item.kinds.includes(d.kind));

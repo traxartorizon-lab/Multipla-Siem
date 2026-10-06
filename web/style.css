@@ -59,3 +59,8 @@ dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);bo
 .ssh-command-info:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .ssh-info-wrap .ssh-command-tooltip{left:auto;right:0;bottom:calc(100% + 8px);width:min(360px,75vw)}
 #ssh-catalog-help,.ssh-command-form>p:empty{display:none}
+
+.ssh-terminal-appearance{display:flex;align-items:center;gap:10px}.ssh-terminal-appearance label{display:flex;align-items:center;gap:8px;white-space:nowrap}.ssh-terminal-appearance select{width:85px;margin:0;padding:7px}.ssh-terminal-appearance button{padding:9px 13px}
+.ssh-terminal-screen{background:#0d1117;padding:18px;border-color:#344252;box-shadow:inset 0 1px 5px #0004}.ssh-terminal-screen .xterm{min-width:0}.ssh-terminal-card>p:first-of-type{color:#83d99e}
+.ssh-terminal-expanded{position:fixed;inset:18px;z-index:100;margin:0;overflow:auto;box-shadow:0 0 0 30px #000b}.ssh-terminal-expanded .ssh-terminal-screen{min-height:calc(100vh - 190px)}
+@media(max-width:720px){.ssh-terminal-expanded{inset:8px}.ssh-terminal-appearance{flex-wrap:wrap}.ssh-terminal-screen{padding:12px}}
