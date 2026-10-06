@@ -1,0 +1,20 @@
+[
+  {
+    "id": "beep",
+    "source": "https://commons.wikimedia.org/wiki/File:Simple_Happy_Beep.ogg",
+    "download": "https://upload.wikimedia.org/wikipedia/commons/0/08/Simple_Happy_Beep.ogg",
+    "author": "waveplaySFX",
+    "license": "CC0",
+    "sha256": "637fed64a1d1ac8fb9ea30fc4fc3d72e20f427da4b50a2ac5a5522be3aebb404",
+    "size": 21417
+  },
+  {
+    "id": "siren",
+    "source": "https://commons.wikimedia.org/wiki/File:Alarm_or_siren.ogg",
+    "download": "https://upload.wikimedia.org/wikipedia/commons/8/81/Alarm_or_siren.ogg",
+    "author": "stephan",
+    "license": "Public domain",
+    "sha256": "4b232d9772d906927bb8a1ec0c0f8a8090c8e6d8ae08200c87dbb2945819f7d8",
+    "size": 279491
+  }
+]

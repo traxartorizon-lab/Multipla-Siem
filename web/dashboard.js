@@ -1,5 +1,5 @@
 'use strict';
-const dashboardDefaultOrder=['collection','alerts','devices','response','activity','recent-alerts','posture'];
+const dashboardDefaultOrder=['collection','alerts','devices','response','resources','activity','recent-alerts','posture'];
 let dashboardEditing=false,dashboardSaving=false,dashboardDragged=null;
 function normalizeDashboardOrder(order){return [...new Set([...(Array.isArray(order)?order:[]),...dashboardDefaultOrder])].filter(id=>dashboardDefaultOrder.includes(id))}
 function dashboardOrder(){return [...$('#dashboard-grid').children].map(n=>n.dataset.dashboardCard)}
@@ -39,3 +39,14 @@ document.querySelectorAll('[data-dashboard-card]').forEach(card=>{
   if(i<0)return;order.splice(i,0,dashboardDragged);applyDashboardOrder(order);
  });
 });
+
+function setMobileNavigation(open){
+ const toggle=document.getElementById('navigation-toggle'),nav=document.getElementById('main-navigation');
+ document.body.classList.toggle('navigation-open',open);toggle.setAttribute('aria-expanded',String(open));toggle.setAttribute('aria-label',open?'Fechar menu':'Abrir menu');document.getElementById('navigation-backdrop').hidden=!open;
+ if(open)nav.querySelector('.nav.active')?.focus();else toggle.focus();
+}
+document.getElementById('navigation-toggle').onclick=()=>setMobileNavigation(!document.body.classList.contains('navigation-open'));
+document.getElementById('navigation-backdrop').onclick=()=>setMobileNavigation(false);
+document.querySelectorAll('.sidebar .nav').forEach(button=>button.addEventListener('click',()=>{if(document.body.classList.contains('navigation-open'))setMobileNavigation(false)}));
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('navigation-open'))setMobileNavigation(false);if(event.key==='Tab'&&document.body.classList.contains('navigation-open')){const buttons=[...document.querySelectorAll('.sidebar button:not([hidden]),#navigation-toggle')].filter(x=>x.getClientRects().length);const first=buttons[0],last=buttons[buttons.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}}});
+window.matchMedia('(max-width:900px)').addEventListener('change',event=>{if(!event.matches&&document.body.classList.contains('navigation-open'))setMobileNavigation(false)});

@@ -1,6 +1,6 @@
 'use strict';
 const deviceNetworkCache=new Map(),deviceNetworkBusy=new Set();
-function displayDeviceNetworkResult(card,info){const result=el('div',undefined,'device-network-result');card.querySelector('.device-network-result')?.remove();for(const [label,key]of [['Hostname (DNS reverso)','hostname'],['MAC cadastrado','mac'],['Vizinhança de rede observada','neighbors'],['Portas TCP selecionadas','ports'],['Compartilhamentos SMB sem credenciais','shares']]){const item=el('details');item.append(el('summary',label),el('pre',info[key]||'Não disponível','network-output'));result.append(item)}result.append(el('p',info.note));card.append(result)}
+function displayDeviceNetworkResult(card,info){const result=el('div',undefined,'device-network-result');card.querySelector('.device-network-result')?.remove();for(const [label,key]of [['Hostname (DNS reverso)','hostname'],['MAC cadastrado','mac'],['Vizinhança de rede observada','neighbors'],['Portas TCP selecionadas','ports'],['Compartilhamentos SMB sem credenciais','shares']]){const item=el('details');preserveDeviceDetail(item,info.ip||card.dataset.deviceIP,label);item.append(el('summary',label),el('pre',info[key]||'Não disponível','network-output'));result.append(item)}result.append(el('p',info.note));card.append(result)}
 function appendDeviceNetworkActions(card,d){
  card.append(el('p',[d.client,d.unit].filter(Boolean).join(' / ')),el('p',d.mac?'MAC cadastrado: '+d.mac:'MAC não cadastrado'));
  const inspect=el('button','Consultar detalhes de rede','secondary');inspect.type='button';inspect.disabled=deviceNetworkBusy.has(d.ip);if(deviceNetworkCache.has(d.ip))displayDeviceNetworkResult(card,deviceNetworkCache.get(d.ip));inspect.onclick=async()=>{deviceNetworkBusy.add(d.ip);
@@ -42,7 +42,7 @@ async function updateDashboardDistribution(){
 }
 
 let deviceMetricsSnapshot={},deviceMetricsFetched=0;
-async function refreshDeviceMetrics(){try{deviceMetricsSnapshot=await api('/api/devices/metrics');deviceMetricsFetched=Date.now();if(page==='devices')render()}catch{}}
+async function refreshDeviceMetrics(){try{deviceMetricsSnapshot=await api('/api/devices/metrics');deviceMetricsFetched=Date.now();if(page==='devices'||page==='overview')render()}catch{}}
 function appendCollectorActions(card,d){
  const metrics=deviceMetricsSnapshot[d.ip];if(d.kind!=='windows'&&d.kind!=='linux'&&!metrics)return;const box=el('div',undefined,'device-metrics');
  if(metrics){const stale=Date.now()-Date.parse(metrics.received)>180000;box.append(el('p',(stale?'Métricas desatualizadas':'Métricas recebidas')+' · '+date(metrics.received)),el('p','Hostname: '+metrics.hostname));for(const [name,value]of [['CPU',metrics.cpu],['Memória',metrics.memory],...(metrics.disks||[]).map(x=>['Disco '+x.drive,x.used_percent])]){const row=el('div',undefined,'metric-resource'),label=el('span',name+' · '+Number(value).toFixed(1)+'%'),bar=el('meter');bar.min=0;bar.max=100;bar.low=70;bar.high=90;bar.optimum=20;bar.value=value;bar.setAttribute('aria-label',name);row.append(label,bar);box.append(row)}box.append(el('p','Rede: ↓ '+(metrics.receive_bytes_per_second/1024).toFixed(1)+' KB/s · ↑ '+(metrics.send_bytes_per_second/1024).toFixed(1)+' KB/s'))}else box.append(el('p','CPU, memória, disco e rede: aguardando coletor.'));card.append(box);if(Date.now()-deviceMetricsFetched>60000){deviceMetricsFetched=Date.now();refreshDeviceMetrics()}if(snapshot?.role==='viewer')return;
@@ -50,5 +50,42 @@ function appendCollectorActions(card,d){
   if(!confirm('Gerar uma chave exclusiva para '+d.name+'? A chave anterior será revogada.'))return;const response=await api('/api/devices/metrics-key','POST',{ip:d.ip});
   const dialog=el('dialog'),close=el('button','Fechar');dialog.append(el('h2','Chave exclusiva · '+d.name),el('p',response.note));const text=el('textarea');text.value=response.key;text.readOnly=true;text.setAttribute('aria-label','Chave do coletor');dialog.append(text,el('p',d.kind==='linux'?'Execute sudo bash ./linux-collector-install.sh. O instalador solicita o endereço HTTPS do SIEM, o IP cadastrado e a chave individual sem exibi-la.':'Baixe o coletor e execute como administrador: powershell -NoProfile -File .\\windows-collector.ps1 -Install -Server "'+snapshot.config.public_url+'" -DeviceIP "'+d.ip+'". A chave será solicitada sem aparecer na linha de comando.'),close);document.body.append(dialog);close.onclick=()=>dialog.close();dialog.addEventListener('close',()=>{text.value='';dialog.remove()},{once:true});dialog.showModal();text.focus();text.select();
  });const revoke=el('button','Revogar coletor','secondary');revoke.type='button';revoke.onclick=()=>run(async()=>{if(!confirm('Revogar o envio de métricas de '+d.name+'?'))return;await api('/api/devices/metrics-key','POST',{ip:d.ip,revoke:true});toast('Chave revogada.')});const download=el('a','Baixar coletor '+(d.kind==='linux'?'Linux':'Windows'),'button secondary');download.href='/api/devices/collector?platform='+(d.kind==='linux'?'linux':'windows');download.download=d.kind==='linux'?'linux-collector-install.sh':'windows-collector.ps1';card.append(key,revoke,download);
+ if(Date.now()-deviceMetricsFetched>60000){deviceMetricsFetched=Date.now();refreshDeviceMetrics()}
+}
+
+const expandedDeviceCards=new Set(),expandedDeviceSections=new Set(),devicePingResults=new Map(),devicePingBusy=new Set();
+function preserveDeviceDetail(node,ip,label){const key=ip+'|'+label;node.open=expandedDeviceSections.has(key);node.addEventListener('toggle',()=>{if(!node.isConnected)return;if(node.open)expandedDeviceSections.add(key);else expandedDeviceSections.delete(key)})}
+function renderCompactDevices(s,devices,readOnly){
+ const grid=$('#device-list');grid.replaceChildren();
+ devices.forEach((d,index)=>{
+  const card=el('article',undefined,'device-card compact-device-card');card.dataset.deviceIP=d.ip;
+  const seen=s.last_seen?.[d.name],tracked=Object.hasOwn(s.device_presence||{},d.ip),online=tracked?s.device_presence[d.ip]:deviceHasRecentEvent(seen);
+  card.append(el('span',tracked?(online?'Online · Tailscale':'Offline · Tailscale'):(online?'Online · eventos':'Sem eventos recentes'),'badge '+(online?'device-online':'device-offline')),el('h2',d.name),el('p',d.kind+' · '+d.ip));
+  const metrics=deviceMetricsSnapshot[d.ip];if(metrics){const summary=el('div',undefined,'device-metric-summary');for(const [label,value] of [['CPU',metrics.cpu],['Memória',metrics.memory]]){const item=el('span',label+' '+Number(value).toFixed(1)+'%');item.className=Number(value)>=90?'resource-danger':Number(value)>=70?'resource-warning':'resource-normal';summary.append(item)}card.append(summary,el('small',(Date.now()-Date.parse(metrics.received)>180000?'Métricas desatualizadas · ':'Atualizado · ')+date(metrics.received)))}else card.append(el('small',seen?'Último evento · '+date(seen):'Aguardando eventos ou coletor'));
+  const toggle=el('button',expandedDeviceCards.has(d.ip)?'Ver menos':'Ver mais','secondary device-expand'),body=el('div',undefined,'device-expanded');toggle.type='button';body.hidden=!expandedDeviceCards.has(d.ip);toggle.setAttribute('aria-expanded',String(!body.hidden));toggle.onclick=()=>{body.hidden=!body.hidden;toggle.textContent=body.hidden?'Ver mais':'Ver menos';toggle.setAttribute('aria-expanded',String(!body.hidden));if(body.hidden)expandedDeviceCards.delete(d.ip);else expandedDeviceCards.add(d.ip)};card.append(toggle,body);
+  body.append(el('p',[d.client,d.unit].filter(Boolean).join(' / ')),action('Editar',()=>startRecordEdit('device',d)),action('Remover',()=>api('/api/config','PUT',{...snapshot.config,devices:snapshot.config.devices.filter((_,i)=>i!==index)})));
+  appendCollectorActions(body,d);body.dataset.deviceIP=d.ip;if(!readOnly){appendDeviceNetworkActions(body,d);appendDevicePing(body,d)}
+  grid.append(card);
+ });
+}
+function appendDevicePing(body,d){
+ const button=el('button',devicePingBusy.has(d.ip)?'Ping em andamento…':'Pingar IP','secondary'),output=el('pre',devicePingResults.get(d.ip)||'','network-output');button.type='button';button.disabled=devicePingBusy.has(d.ip);output.hidden=!devicePingResults.has(d.ip);body.append(button,output);
+ button.onclick=async()=>{devicePingBusy.add(d.ip);button.disabled=true;output.hidden=false;output.textContent='Enviando quatro pacotes ICMP a partir do SIEM…';try{const result=await api('/api/devices/network','POST',{ip:d.ip,action:'ping'});devicePingResults.set(d.ip,result.result);output.textContent=result.result}catch(error){devicePingResults.set(d.ip,error.message);output.textContent=error.message}finally{devicePingBusy.delete(d.ip);button.disabled=false}};
+}
+
+let dashboardResourceDevice='';
+function resourceGauge(label,value){
+ const card=el('div',undefined,'resource-gauge'),ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox','0 0 120 120');svg.setAttribute('role','img');svg.setAttribute('aria-label',label+' '+Number(value).toFixed(1)+' por cento');
+ const percent=Math.max(0,Math.min(100,Number(value))),color=percent>=90?'#ff8eab':percent>=70?'#ffbc66':'#53dec1',length=2*Math.PI*45;
+ for(const active of [false,true]){const circle=document.createElementNS(ns,'circle');for(const [key,val]of Object.entries({cx:60,cy:60,r:45,fill:'none',stroke:active?color:'#253746','stroke-width':9,'stroke-linecap':'round',transform:'rotate(135 60 60)','stroke-dasharray':((active?percent/100:1)*length*.75)+' '+length}))circle.setAttribute(key,val);svg.append(circle)}
+ const text=document.createElementNS(ns,'text');for(const [key,val]of Object.entries({x:60,y:66,'text-anchor':'middle',fill:color,'font-size':21,'font-weight':600}))text.setAttribute(key,val);text.textContent=percent.toFixed(1)+'%';svg.append(text);card.append(svg,el('b',label));return card;
+}
+function renderDashboardResources(s){
+ const select=$('#dashboard-resource-device'),choices=(s.config.devices||[]).filter(d=>['windows','linux','proxmox'].includes(d.kind)||deviceMetricsSnapshot[d.ip]);select.replaceChildren();
+ for(const d of choices){const option=el('option',d.name+' · '+d.ip);option.value=d.ip;select.append(option)}
+ if(!choices.some(d=>d.ip===dashboardResourceDevice))dashboardResourceDevice=choices.find(d=>deviceMetricsSnapshot[d.ip])?.ip||choices[0]?.ip||'';select.value=dashboardResourceDevice;select.onchange=()=>{dashboardResourceDevice=select.value;renderDashboardResources(snapshot)};
+ const root=$('#dashboard-resource-gauges'),network=$('#dashboard-resource-network');root.replaceChildren();network.replaceChildren();const metric=deviceMetricsSnapshot[dashboardResourceDevice];
+ if(metric){const stale=Date.now()-Date.parse(metric.received)>180000;$('#dashboard-resource-status').textContent=(stale?'Métricas desatualizadas':'Coletor ativo')+' · '+metric.hostname+' · '+date(metric.received);root.append(resourceGauge('CPU',metric.cpu),resourceGauge('Memória',metric.memory),...(metric.disks||[]).slice(0,6).map(d=>resourceGauge('Disco '+d.drive,d.used_percent)));network.append(el('span','↓ Recepção '+(metric.receive_bytes_per_second/1024).toFixed(1)+' KB/s'),el('span','↑ Transmissão '+(metric.send_bytes_per_second/1024).toFixed(1)+' KB/s'),el('small','Taxa atual agregada das interfaces'));
+ }else{$('#dashboard-resource-status').textContent='Sem métricas recebidas para esta máquina';root.append(el('p','Cadastre uma máquina Windows/Linux e instale o coletor para acompanhar CPU, memória, discos e rede.','empty'))}
  if(Date.now()-deviceMetricsFetched>60000){deviceMetricsFetched=Date.now();refreshDeviceMetrics()}
 }

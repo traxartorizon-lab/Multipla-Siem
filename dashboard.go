@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var dashboardCards = []string{"collection", "alerts", "devices", "response", "activity", "recent-alerts", "posture"}
+var dashboardCards = []string{"collection", "alerts", "devices", "response", "resources", "activity", "recent-alerts", "posture"}
 
 func validateDashboardOrder(order []string) error {
 	if len(order) > len(dashboardCards) {

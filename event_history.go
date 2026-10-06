@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+"errors"
 	"net/http"
 	"os"
 	"strconv"
@@ -10,16 +11,26 @@ import (
 	"time"
 )
 
+func historyTimeRange(r *http.Request, now time.Time) (time.Time, time.Time, error) {
+ end:=now
+ if value:=r.URL.Query().Get("to");value!="" { parsed,err:=time.Parse(time.RFC3339Nano,value);if err!=nil{return now,now,errors.New("data/hora final inválida")};end=parsed.UTC() }
+ start:=end.Add(-24*time.Hour)
+ if value:=r.URL.Query().Get("from");value!="" {parsed,err:=time.Parse(time.RFC3339Nano,value);if err!=nil{return now,now,errors.New("data/hora inicial inválida")};start=parsed.UTC()}
+ if end.After(now) || !start.Before(end) || end.Sub(start)>31*24*time.Hour {return now,now,errors.New("use um intervalo passado de até 31 dias, com início anterior ao fim")}
+ return start,end,nil
+}
+
 // Read journals backwards so pagination never depends on the in-memory dashboard window.
 func (a *App) historyEvents(r *http.Request, offset int, matchID string) ([]Event, bool, bool, error) {
 	now := time.Now().UTC()
-	cut := now.Add(-24 * time.Hour)
+	cut,end,rangeErr := historyTimeRange(r,now)
+ if rangeErr!=nil {return nil,false,false,rangeErr}
 	events := []Event{}
 	matched := 0
 	budget := int64(64 << 20)
 	deadline := time.Now().Add(10 * time.Second)
 	query := strings.ToLower(r.URL.Query().Get("q"))
-	for day := now; !day.Before(cut.Truncate(24 * time.Hour)); day = day.AddDate(0, 0, -1) {
+	for day := end; !day.Before(cut.Truncate(24 * time.Hour)); day = day.AddDate(0, 0, -1) {
 		path := a.journalPath(day)
 		err := regularFile(path)
 		if os.IsNotExist(err) {
@@ -72,7 +83,7 @@ func (a *App) historyEvents(r *http.Request, offset int, matchID string) ([]Even
 			}
 			for i := len(lines) - 1; i >= first; i-- {
 				var event Event
-				if json.Unmarshal(lines[i], &event) != nil || event.Time.Before(cut) || event.Time.After(now) {
+				if json.Unmarshal(lines[i], &event) != nil || event.Time.Before(cut) || event.Time.After(end) {
 					continue
 				}
 				if matchID != "" {
@@ -82,7 +93,7 @@ func (a *App) historyEvents(r *http.Request, offset int, matchID string) ([]Even
 					}
 					continue
 				}
-				if query != "" && !strings.Contains(strings.ToLower(event.Message+" "+event.Device+" "+event.SourceIP), query) {
+				if query != "" && !strings.Contains(strings.ToLower(event.Message+" "+event.Device+" "+event.SourceIP+" "+event.SenderIP+" "+event.Rule), query) {
 					continue
 				}
 				matched++
@@ -115,6 +126,7 @@ func (a *App) registerHistoryRoutes(mux *http.ServeMux) {
 			http.Error(w, "Busca muito longa", 400)
 			return
 		}
+		if _,_,err:=historyTimeRange(r,time.Now().UTC());err!=nil {http.Error(w,err.Error(),400);return}
 		select {
 		case reportSlots <- struct{}{}:
 			defer func() { <-reportSlots }()

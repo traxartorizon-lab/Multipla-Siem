@@ -100,7 +100,7 @@ func (a *App) registerDeviceNetworkRoutes(mux *http.ServeMux) {
 			http.Error(w, "ação indisponível na demonstração", 403)
 			return
 		}
-		if body.Action != "wake" && body.Action != "inspect" {
+		if body.Action != "wake" && body.Action != "inspect" && body.Action != "ping" {
 			http.Error(w, "ação inválida", 400)
 			return
 		}
@@ -122,6 +122,17 @@ func (a *App) registerDeviceNetworkRoutes(mux *http.ServeMux) {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 35*time.Second)
 		defer cancel()
+
+		if body.Action == "ping" {
+			pingCtx, pingCancel := context.WithTimeout(ctx, 15*time.Second)
+			defer pingCancel()
+			output, pingErr := deviceCommand(pingCtx, "/usr/bin/ping", "-n", "-c", "4", "-W", "2", "-w", "12", "--", d.IP)
+			if pingErr != nil {
+				output = "Ping incompleto ou sem resposta. ICMP pode estar bloqueado; isso não confirma dispositivo desligado.\n" + output
+			}
+			writeJSON(w, map[string]string{"result": output})
+			return
+		}
 		if body.Action == "wake" {
 			packet, err := magicPacket(d.MAC)
 			if err != nil || d.WOLTarget == "" {

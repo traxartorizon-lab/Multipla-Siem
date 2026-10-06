@@ -2,9 +2,22 @@ param([switch]$Install,[switch]$Uninstall,[string]$Server,[string]$DeviceIP)
 $ErrorActionPreference='Stop'
 $collectorRoot=Join-Path $env:ProgramData 'MultiplaSIEM-Collector'
 $taskName='MultiplaSIEM-Metrics'
+$collectorBackground=[Environment]::GetCommandLineArgs() -contains '-NonInteractive'
+if(-not $Install -and -not $Uninstall -and -not $collectorBackground -and -not (Test-Path -LiteralPath (Join-Path $collectorRoot 'config.json'))){$Install=$true}
+$collectorInteractiveInstall=$Install -and (-not $Server -or -not $DeviceIP)
+
 if($Uninstall){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue;Write-Output 'Coletor desativado. Revogue a chave no SIEM; remova a pasta protegida se não for reutilizar.';exit}
 if($Install){
- if(-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Execute como administrador'}
+ try{
+ if(-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
+  if($collectorBackground){throw 'A instalacao requer administrador'}
+  $installerPowerShell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  # Elevation passes no key, password or token. The elevated installer asks for all values.
+  Start-Process -FilePath $installerPowerShell -Verb RunAs -ArgumentList ('-NoProfile -ExecutionPolicy RemoteSigned -File "'+$PSCommandPath+'" -Install') -Wait
+  exit
+ }
+ if(-not $Server){$Server=Read-Host 'Endereco HTTPS do SIEM (exemplo: https://siemserver.tail4ac2e7.ts.net:8443)'}
+ if(-not $DeviceIP){$DeviceIP=Read-Host 'IP da maquina exatamente como cadastrado no SIEM'}
  $origin=[Uri]$Server
  if($origin.Scheme -ne 'https' -or $origin.UserInfo -or $origin.Query -or $origin.Fragment -or $origin.AbsolutePath -ne '/'){throw 'Informe somente a origem HTTPS do SIEM, com certificado confiável'}
  $parsedIP=$null;if(-not [Net.IPAddress]::TryParse($DeviceIP,[ref]$parsedIP)){throw 'Informe o IP exatamente como cadastrado no SIEM'}
@@ -26,7 +39,15 @@ if($Install){
  $trigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)
  $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 50) -MultipleInstances IgnoreNew -StartWhenAvailable
  Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal (New-ScheduledTaskPrincipal -UserId 'S-1-5-19' -LogonType ServiceAccount -RunLevel Limited) -Force|Out-Null
- Write-Output 'Coletor instalado: envia somente métricas por HTTPS a cada minuto. Nenhuma porta de entrada foi aberta.';exit
+ Start-ScheduledTask -TaskName $taskName
+ Write-Output 'Coletor instalado. Primeira coleta iniciada; proximas coletas a cada minuto. Nenhuma porta de entrada foi aberta.'
+ if($collectorInteractiveInstall){Read-Host 'Pressione Enter para fechar'|Out-Null}
+ exit
+ }catch{
+  Write-Host ('Instalacao nao concluida: '+$_.Exception.Message) -ForegroundColor Red
+  if(-not $collectorBackground){Read-Host 'Pressione Enter para fechar apos ler o erro'|Out-Null}
+  exit 1
+ }
 }
 try{
  $config=Get-Content -LiteralPath (Join-Path $collectorRoot 'config.json') -Raw|ConvertFrom-Json

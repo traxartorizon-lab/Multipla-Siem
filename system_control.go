@@ -55,6 +55,7 @@ var dashboardReportCache struct {
 }
 
 func (a *App) registerSystemRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/dashboard/activity", a.auth(a.serveActivityHistory))
 	mux.HandleFunc("GET /api/dashboard/distribution", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		a.mu.Lock()
 		dataDir := a.cfg.DataDir
