@@ -1,9 +1,5 @@
-# Multipla Siem 1.2.8
+# Multipla Siem 1.2.9
 
-- Confirmação da identidade SSH em popup ao conectar, antes do envio da credencial; identificação já confiável dispensa confirmação.
-- Cursor piscante, foco ao conectar e botão para focar o terminal.
-- Estilos do terminal e do catálogo com versão na URL para evitar cache antigo.
-- Comandos em grade, ícone de informação com ajuda ao passar o mouse ou focar pelo teclado; comandos do terminal recolhidos.
-- Ollama permanece com a configuração local existente; não são incluídos novos ajustes de pesquisa externa.
+Corrige uma chave ausente no bloco CSS de impressão de relatórios, que fazia os estilos de rede, SSH, botões e balões valerem apenas na impressão. Os comandos agora aparecem em grade, com ícones de informação e ajuda oculta até passar o mouse ou focar o ícone.
 
-Validação: testes Go, sintaxe JavaScript e confirmação/cancelamento da identidade sem transmissão de senha.
+Validação: prévia no navegador com o CSS real, explicações ocultas inicialmente, balão ao focar o ícone e seleção de comando no editor. Testes Go e vet.
