@@ -1,6 +1,7 @@
 'use strict';
 let receiverSources=[],receiverEditing=-1;
 async function renderReceivers(force=false){
+ if(typeof renderN8N==='function')await renderN8N();
  const data=await api('/api/receivers'),settings=data.settings;
  const host=new URL(snapshot.config.public_url).hostname;$('#syslog-address').textContent='Destino nos equipamentos: '+host+' · porta '+data.syslog_address.split(':').pop()+' · TCP e UDP';
  $('#snmp-address').textContent='Destino dos traps: '+host+' · porta '+data.snmp_address.split(':').pop()+' · UDP';

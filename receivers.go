@@ -34,6 +34,9 @@ var receiverRedactions atomic.Pointer[[]string]
 
 func (a *App) receiverSecrets() {
 	values := []string{}
+	if secret, e := openDriveToken("n8n", a.state.N8N.Credentials); e == nil {
+		values = append(values, secret.Access)
+	}
 	for _, source := range a.state.Receivers.Sources {
 		if secret, e := openDriveToken("snmp:"+source.IP, source.Credentials); e == nil {
 			values = append(values, secret.Access, secret.Refresh, secret.Scope)

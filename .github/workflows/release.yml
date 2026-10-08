@@ -28,6 +28,8 @@ jobs:
           CGO_ENABLED: '0'
           GOTELEMETRY: 'off'
         run: |
+          node --check web/n8n.js
+          node scripts/test-n8n-workflow.cjs
           go test -mod=vendor ./...
           go vet -mod=vendor ./...
           mkdir -p dist

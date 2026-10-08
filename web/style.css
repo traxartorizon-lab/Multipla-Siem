@@ -184,3 +184,28 @@ dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);bo
 .activity-values{font-size:10px;color:#91a7bd;line-height:1.5;overflow-wrap:anywhere;min-height:30px;margin-top:6px}
 #overview .activity-chart svg{height:auto;min-height:150px;max-height:205px}
 @media(max-width:600px){#overview .activity-controls{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}#overview .activity-controls label{min-width:0}#overview .activity-controls .activity-filter{grid-column:1/-1}#overview .activity-controls select{font-size:16px}}
+/* Guided n8n setup keeps credentials and actions readable on narrow screens. */
+.n8n-panel fieldset{border:0;padding:0;margin:0;min-width:0}
+.n8n-panel li{margin-bottom:12px;line-height:1.6}
+.n8n-panel code{overflow-wrap:anywhere}
+.n8n-panel .n8n-token-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.n8n-panel .n8n-token-actions .check{width:100%}
+.n8n-panel #n8n-status,.n8n-panel #n8n-result{overflow-wrap:anywhere}
+
+/* Event feed: independent client rail, responsive wrapping. */
+#events .events-layout{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:18px;align-items:start}
+#events .events-primary{min-width:0}#events .events-primary>h2{margin-top:0;overflow-wrap:anywhere}
+#events .event-client-panel{min-width:0;padding:16px;margin:0;position:sticky;top:16px}
+#events .event-client-panel h2{margin-top:0}#events .event-client-panel p,#events .event-client-panel small{overflow-wrap:anywhere}
+#events .event-client-list{height:460px;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;scrollbar-gutter:stable;scrollbar-width:thin;margin:12px 0;display:flex;flex-direction:column;gap:8px}
+#events .event-client-tab{width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere;padding:12px;flex-shrink:0;display:block;min-width:0}
+#events .event-client-tab strong{display:block;overflow-wrap:anywhere}#events .event-client-counts{display:flex;flex-wrap:wrap;justify-content:space-between;gap:5px;font-size:12px;margin-top:6px;color:var(--muted)}
+#events .event-client-tab[aria-pressed=true],#events #event-all-clients[aria-pressed=true]{border-color:var(--accent);background:#153c35}
+#events #event-all-clients{width:100%;white-space:normal;overflow-wrap:anywhere}
+#events .event-client-track{display:block;height:3px;background:#263746;margin-top:8px;border-radius:2px;overflow:hidden}#events .event-client-track>span{display:block;height:100%;background:var(--accent)}
+#events .critical-text{color:#ff7480}#events .toolbar{flex-wrap:wrap;gap:12px}#events .toolbar label{min-width:0;max-width:100%;flex:1 1 160px}#events .toolbar input,#events .toolbar select{max-width:100%;min-width:0;width:100%}
+#events .events-log-panel{overflow-x:auto;min-width:0;margin-top:12px}#events .events-log-panel table{table-layout:fixed;width:100%;min-width:0}#events .events-log-panel th,#events .events-log-panel td{overflow-wrap:anywhere;white-space:normal;min-width:0}#events .events-log-panel .message{max-width:none;overflow-wrap:anywhere}#events .events-log-panel th:nth-child(1){width:100px}#events .events-log-panel th:nth-child(2){width:74px}#events .events-log-panel th:nth-child(4){width:100px}#events .events-log-panel th:nth-child(5){width:100px}#events .events-log-panel th:nth-child(6){width:120px}#events .events-log-panel pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:1100px){#events .events-layout{grid-template-columns:minmax(0,1fr) 220px}#events .events-log-panel th:nth-child(4),#events .events-log-panel th:nth-child(5){width:80px}#events .events-log-panel th:nth-child(6){width:95px}}
+@media(max-width:900px){#events .events-layout{grid-template-columns:minmax(0,1fr)}#events .event-client-panel{grid-row:1;position:static}#events .event-client-list{height:190px}#events .events-log-panel table,#events .events-log-panel tbody,#events .events-log-panel tr,#events .events-log-panel td{display:block;width:100%}#events .events-log-panel thead{display:none}#events .events-log-panel tr{padding:12px;border-bottom:1px solid #293747}#events .events-log-panel td{padding:5px 0;border:0}#events .events-log-panel td:nth-child(1):before{content:'Horário: ';color:var(--muted)}#events .events-log-panel td:nth-child(4):before{content:'Dispositivo: ';color:var(--muted)}#events .events-log-panel td:nth-child(5):before{content:'IP de origem: ';color:var(--muted)}#events .events-log-panel td:nth-child(6)>div{display:flex;flex-wrap:wrap;gap:10px}#events .toolbar>small{flex-basis:100%}}
+#events .events-log-panel td,#events .events-log-panel th{padding:12px 10px}#events .events-log-panel .text-button{padding:4px 0;white-space:normal;overflow-wrap:anywhere}#events .events-log-panel td:first-child{word-break:normal}
+@media(min-width:901px) and (max-width:1250px){#events .events-layout{grid-template-columns:minmax(0,1fr) 210px}#events .events-log-panel th:nth-child(1){width:88px}#events .events-log-panel th:nth-child(2){width:60px}#events .events-log-panel th:nth-child(4),#events .events-log-panel th:nth-child(5){width:65px}#events .events-log-panel th:nth-child(6){width:80px}}

@@ -106,6 +106,8 @@ type Audit struct {
 	Action string    `json:"action"`
 }
 type State struct {
+	N8N               N8NSettings                `json:"n8n,omitempty"`
+	N8NOutbox         []N8NDelivery              `json:"n8n_outbox,omitempty"`
 	MetricKeys        map[string]string          `json:"metric_keys,omitempty"`
 	DeviceMetrics     map[string]DeviceTelemetry `json:"device_metrics,omitempty"`
 	TemporaryReports  []TemporaryReport          `json:"temporary_reports,omitempty"`
@@ -147,6 +149,8 @@ type bucket struct {
 	Last  time.Time
 }
 type App struct {
+	n8nTestBusy    bool
+	n8nTestLast    time.Time
 	sshTerminals   map[string]*sshTerminal
 	networkTests   map[string]*NetworkTest
 	aiQueue        chan Event
@@ -369,6 +373,12 @@ func newApp(c Config, path string, demo bool) (*App, error) {
 	if err := validateReceivers(a.state.Receivers); err != nil {
 		return nil, err
 	}
+	if err := validateN8N(a.state.N8N); err != nil {
+		return nil, err
+	}
+	if len(a.state.N8NOutbox) > n8nQueueLimit {
+		return nil, errors.New("fila n8n excedida")
+	}
 	a.receiverSecrets()
 	if a.state.GoogleSubjects == nil {
 		a.state.GoogleSubjects = map[string]string{}
@@ -494,6 +504,7 @@ func (a *App) appendEvent(e Event) bool {
 	a.remember(e)
 	a.enqueueLocalAI(e)
 	a.queueWebhook(e)
+	a.queueN8N(e)
 	return true
 }
 func sourceIP(raw, kind string) string {
@@ -1181,6 +1192,7 @@ func (a *App) routes() http.Handler {
 	a.registerLocalAuth(mux)
 	a.registerGoogleSettings(mux)
 	a.registerReceiverRoutes(mux)
+	a.registerN8NRoutes(mux)
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
@@ -1199,10 +1211,10 @@ func (a *App) routes() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(b)
 	})
-	for _, path := range []string{"style.css", "favicon.svg", "alert-sounds.js", "device-network.js", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
+	for _, path := range []string{"style.css", "favicon.svg", "alert-sounds.js", "device-network.js", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "n8n.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
 		p := path
 		mux.HandleFunc("GET /"+p, func(w http.ResponseWriter, r *http.Request) {
-			if p == "alert-sounds.js" || p == "device-network.js" || p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" || p == "dashboard.js" || p == "reports.js" || p == "network.js" || p == "ssh.js" || p == "dhcp.js" || p == "test-reports.js" || p == "xterm.js" {
+			if p == "n8n.js" || p == "alert-sounds.js" || p == "device-network.js" || p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" || p == "dashboard.js" || p == "reports.js" || p == "network.js" || p == "ssh.js" || p == "dhcp.js" || p == "test-reports.js" || p == "xterm.js" {
 				w.Header().Set("Content-Type", "text/javascript")
 			} else if p == "favicon.svg" {
 				w.Header().Set("Content-Type", "image/svg+xml")
@@ -1352,7 +1364,7 @@ func (a *App) routes() http.Handler {
 			visibleConfig.MailTo = ""
 			visibleAudit = nil
 		}
-		writeJSON(w, map[string]any{"role": role, "snmp_devices": snmpDevices, "preferences": a.preferences(s.Email), "drive_connected": a.state.DriveTokens[strings.ToLower(s.Email)] != "", "analysis": a.analysisSnapshot(), "local_ai": a.localAISnapshot(), "events": evs, "alerts": alerts, "total": total, "bins": bins, "blocks": blocks, "config": visibleConfig, "rules": a.state.Rules, "audit": visibleAudit, "last_seen": a.lastSeen, "device_presence": visiblePresence, "mail_status": a.mailStatus, "storage_error": a.storageError, "dropped": a.dropped, "feed_seen": a.feedSeen, "email": s.Email, "csrf": s.CSRF, "demo": a.demo, "local_account_ready": a.state.LocalAdmin.Hash != "", "google_ready": a.state.GoogleSettings != "" || secret("GOOGLE_CLIENT_ID") != "", "mail_ready": secret("GMAIL_APP_PASSWORD") != ""})
+		writeJSON(w, map[string]any{"role": role, "snmp_devices": snmpDevices, "event_clients": a.eventClientIndex(), "preferences": a.preferences(s.Email), "drive_connected": a.state.DriveTokens[strings.ToLower(s.Email)] != "", "analysis": a.analysisSnapshot(), "local_ai": a.localAISnapshot(), "events": evs, "alerts": alerts, "total": total, "bins": bins, "blocks": blocks, "config": visibleConfig, "rules": a.state.Rules, "audit": visibleAudit, "last_seen": a.lastSeen, "device_presence": visiblePresence, "mail_status": a.mailStatus, "storage_error": a.storageError, "dropped": a.dropped, "feed_seen": a.feedSeen, "email": s.Email, "csrf": s.CSRF, "demo": a.demo, "local_account_ready": a.state.LocalAdmin.Hash != "", "google_ready": a.state.GoogleSettings != "" || secret("GOOGLE_CLIENT_ID") != "", "mail_ready": secret("GMAIL_APP_PASSWORD") != ""})
 	}))
 	mux.HandleFunc("PUT /api/config", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		var c Config
@@ -1797,6 +1809,7 @@ func main() {
 	go a.temporaryReportCleaner()
 	go a.mailWorker()
 	go a.webhookWorker()
+	go a.n8nWorker()
 	go a.snmpWorker()
 	srv := &http.Server{Addr: c.Listen, Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
 	log.Printf("Multipla Siem em %s; syslog TCP/UDP %s; demo=%t", c.Listen, c.Syslog, *demo)

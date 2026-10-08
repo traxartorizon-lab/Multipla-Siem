@@ -223,6 +223,9 @@ func (a *App) restoreBackup(email string, data []byte) error {
 		return errors.New("não foi possível salvar configuração")
 	}
 	a.cfg = c
+	a.state.N8N.Enabled = false
+	a.state.N8N.Verified = ""
+	a.state.N8NOutbox = nil
 	a.state.Rules = b.Rules
 	if b.NetworkEquipment != nil {
 		a.state.NetworkEquipment = append([]NetworkEquipment{}, (*b.NetworkEquipment)...)
