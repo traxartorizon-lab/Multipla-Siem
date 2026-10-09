@@ -459,7 +459,9 @@ func (a *App) remember(e Event) {
 	e = sanitizeEvent(e)
 	a.events = append(a.events, e)
 	if len(a.events) > 2000 {
-		a.events = append([]Event(nil), a.events[len(a.events)-2000:]...)
+		// Keep the bounded window without allocating/copying 2,000 events per log.
+		// append occasionally grows the backing array; advancing the slice amortizes that cost.
+		a.events = a.events[len(a.events)-2000:]
 	}
 	day := e.Time.UTC().Format("2006-01-02")
 	if a.totalDay != day {

@@ -1,11 +1,9 @@
-# Multipla Siem 1.2.23
+# Multipla Siem 1.2.24
 
-## 1.2.23
+## 1.2.24
 
-Dashboard com arraste pelo cabeçalho e encaixe automático dos cards, preservando redimensionamento pelas bordas, preferências da conta e visualização móvel. Conteúdo mantém altura mínima e quebra de texto.
+Corrige alocação excessiva ao reconstruir a janela dos eventos na inicialização e durante a coleta. O histórico continua sendo lido para recuperar os totais do dia, mas a janela de 2.000 eventos avança sem copiar todos os registros a cada linha. Preserva os eventos mais recentes, contagem diária e último horário por dispositivo. Testes de recuperação e benchmark adicionados.
 
-Gráfico de atividade lê os registros mais recentes primeiro, evitando que o limite de leitura do histórico consuma a consulta antes de chegar aos logs atuais.
+Mantém todas as funcionalidades da 1.2.23, a verificação TLS, as assinaturas de atualização e a restauração automática se o painel não ficar disponível.
 
-Prévia dos IPs críticos no card e no popup, com download separado. Períodos rápidos usam o relógio do servidor. Versão exibida no painel acompanha a versão instalada.
-
-Alerta global POSSIVEL TENTATIVA DE INVASAO após dez falhas de senha SSH do mesmo IP em menos de um minuto, inclusive entre dispositivos. Não conta novamente o registro Invalid user correspondente. Popup vermelho com sirene mediante habilitação de áudio no navegador, consulta aos eventos e controles para silenciar/fechar. Intervalo de um minuto entre avisos por IP; não aplica bloqueio automático.
+Consulta focada pelo botão Ver eventos das notificações e do popup de invasão. Pausa a atualização ao vivo e mantém paginação: eventos do mesmo tipo no dispositivo nas 24h até o gatilho; para o alerta global, falhas de senha do mesmo IP nos 60s do gatilho, entre dispositivos. Metadados compactos persistidos nas notificações novas; notificações antigas resolvidas pelo histórico quando disponível. Registro removido pela retenção ou consulta parcial é informado sem redirecionar ao fluxo ao vivo.

@@ -10,12 +10,13 @@ import (
 )
 
 type SystemNotification struct {
-	ID       string    `json:"id"`
-	Time     time.Time `json:"time"`
-	Title    string    `json:"title"`
-	Detail   string    `json:"detail"`
-	Severity string    `json:"severity"`
-	EventID  string    `json:"event_id,omitempty"`
+	Focus    *EventFocus `json:"focus,omitempty"`
+	ID       string      `json:"id"`
+	Time     time.Time   `json:"time"`
+	Title    string      `json:"title"`
+	Detail   string      `json:"detail"`
+	Severity string      `json:"severity"`
+	EventID  string      `json:"event_id,omitempty"`
 }
 type HostThread struct {
 	PID      int     `json:"pid"`
@@ -66,7 +67,8 @@ func (a *App) notifyCriticalEvent(e Event) {
 	if title == "" {
 		title = "Evento crítico"
 	}
-	a.addNotification(SystemNotification{ID: "event-" + e.ID, Time: time.Now().UTC(), Title: title, Detail: e.Device + " · " + e.SourceIP, Severity: "critical", EventID: e.ID})
+	focus := focusForEvent(e)
+	a.addNotification(SystemNotification{Focus: &focus, ID: "event-" + e.ID, Time: time.Now().UTC(), Title: title, Detail: e.Device + " · " + e.SourceIP, Severity: "critical", EventID: e.ID})
 }
 func (a *App) updateHostConditions(health HostHealth) {
 	if a.state.HostConditions == nil {

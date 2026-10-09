@@ -44,6 +44,17 @@ func (a *App) readHistoryEvents(r *http.Request, offset int, matchID string, cri
 	if rangeErr != nil {
 		return nil, false, false, rangeErr
 	}
+	var focus *EventFocus
+	if id := r.URL.Query().Get("focus"); id != "" && matchID == "" {
+		if len(id) > 200 {
+			return nil, false, false, errors.New("Gatilho inválido")
+		}
+		f, err := a.resolveEventFocus(r, id)
+		if err != nil {
+			return nil, false, false, err
+		}
+		focus = &f
+	}
 	events := []Event{}
 	matched := 0
 	budget := int64(64 << 20)
@@ -132,6 +143,9 @@ func (a *App) readHistoryEvents(r *http.Request, offset int, matchID string, cri
 					}
 					continue
 				}
+				if focus != nil && !focus.matches(event) {
+					continue
+				}
 				if query != "" && !strings.Contains(strings.ToLower(event.Message+" "+event.Device+" "+event.SourceIP+" "+event.SenderIP+" "+event.Rule), query) {
 					continue
 				}
@@ -188,6 +202,35 @@ func (a *App) registerHistoryRoutes(mux *http.ServeMux) {
 			http.Error(w, "Consulta em andamento; tente novamente", 429)
 			return
 		}
+		var focus *EventFocus
+		if id := r.URL.Query().Get("focus"); id != "" {
+			if len(id) > 200 {
+				http.Error(w, "Gatilho inválido", 400)
+				return
+			}
+			f, err := a.resolveEventFocus(r, id)
+			if err != nil {
+				http.Error(w, err.Error(), 404)
+				return
+			}
+			focus = &f
+			end := f.Time.Add(time.Nanosecond)
+			if end.After(time.Now().UTC()) {
+				end = time.Now().UTC()
+			}
+			start := end.Add(-24 * time.Hour)
+			if f.Detector == "ssh-login-burst" {
+				start = f.Time.Add(-time.Minute)
+			}
+			clone := r.Clone(r.Context())
+			u := *r.URL
+			clone.URL = &u
+			p := u.Query()
+			p.Set("from", start.Format(time.RFC3339Nano))
+			p.Set("to", end.Format(time.RFC3339Nano))
+			clone.URL.RawQuery = p.Encode()
+			r = clone
+		}
 		events, more, partial, err := a.historyEvents(r, offset, "")
 		if err != nil {
 			http.Error(w, "Falha ao ler histórico", 500)
@@ -216,6 +259,6 @@ func (a *App) registerHistoryRoutes(mux *http.ServeMux) {
 		}
 		a.mu.Unlock()
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, map[string]any{"events": events, "more": more, "partial": partial, "offset": offset, "hours": 24})
+		writeJSON(w, map[string]any{"events": events, "more": more, "partial": partial, "offset": offset, "hours": 24, "focus": focus})
 	}))
 }
