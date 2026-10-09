@@ -78,8 +78,9 @@ func (a *App) resolveEventFocus(r *http.Request, id string) (EventFocus, error) 
 	query.URL = &u
 	p := u.Query()
 	p.Del("focus")
-	p.Set("from", time.Now().UTC().Add(-31*24*time.Hour).Format(time.RFC3339Nano))
-	p.Del("to")
+	now := time.Now().UTC()
+	p.Set("from", now.Add(-31*24*time.Hour).Format(time.RFC3339Nano))
+	p.Set("to", now.Format(time.RFC3339Nano))
 	query.URL.RawQuery = p.Encode()
 	events, _, partial, err := a.historyEvents(query, 0, id)
 	if err != nil {
