@@ -1,5 +1,9 @@
 # Multipla Siem 1.2.20
 
+## 1.2.21
+
+Pergunte à IA com consultas por cliente e relatórios, ditado com consentimento, gráfico de recursos da VM em 24h e capacidade/alertas de espaço em disco.
+
 Classificação persistente por descrição: marcar/desmarcar eventos críticos, escolha de áudio e ativação/desativação posterior. Cabeçalhos syslog são ignorados; em mensagens reconhecidas de ataque SSHguard o IP pode variar. As marcações aparecem na dashboard e no histórico. Evidências originais e bloqueios existentes permanecem preservados. Até 128 descrições; alterações futuras começam na primeira marcação, além dos eventos explicitamente selecionados.
 
 Lista de IPs de origem dos críticos para visualização e download TXT, com períodos de 1h, 6h, 24h ou 7 dias. IP do remetente não é usado como substituto do atacante. Leitura limitada a 64 MiB, 10 segundos e 10.000 eventos críticos; resultado parcial é indicado e não permite download incompleto. Eventos derivados compartilham a contagem com seu evento de origem.

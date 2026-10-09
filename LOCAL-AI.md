@@ -98,3 +98,16 @@ São usados até três resumos do índice de busca, com links das fontes, como c
 Para testar um modelo maior, execute `ollama pull qwen3:4b` no Debian e selecione qwen3:4b em Configurações → Diagnósticos e IA local → Salvar modelo. Mantenha o 0.6b como alternativa. A qualidade e o tempo devem ser comparados com dados reais; memória/CPU variam com contexto e carga. As inferências do SIEM são serializadas, contexto de 3.072 tokens, geração até 600 tokens e prazo de 90 segundos. O qwen3:4b não é baixado ou selecionado automaticamente.
 
 Consultas DHCP e relatórios temporários usam somente o Ollama local, sem pesquisa externa. A captura e os comandos não são controlados pelo modelo. Em muitos servidores, a interpretação usa uma amostra explícita de até quatro registros; a lista completa permanece na tela/relatório. A IA não determina autorização dos servidores DHCP e não substitui revisão técnica.
+
+
+## Pergunte à IA (1.2.21)
+
+O botão no cabeçalho abre uma conversa temporária com o modelo selecionado nas Configurações. A opção de contexto usa dados estruturados da seção atual: amostra de logs em eventos, indicadores/recursos na visão geral, resumo do relatório, inventário em dispositivos e saúde da VM em notificações. Não lê formulários, senhas, tokens, terminal ou a página inteira. Equipamentos de rede incluem uma amostra dos testes e inventário; regras, respostas e auditoria incluem resumos limitados. Configurações, integrações e backups incluem somente indicadores selecionados, sem credenciais. Desmarque a opção para perguntar sem contexto.
+
+Pedidos de busca e relatório produzem filtros para confirmação, com cliente, trecho literal, data/hora local e somente críticos. O servidor valida cliente e período; consultas usam as mesmas permissões de leitura do histórico. A IA não recebe ferramentas nem acesso ao banco/terminal. O modelo recebe os dois últimos pares de conversa, limitados; ao fechar/limpar, a conversa é descartada. Conteúdo redigido, saídas exibidas por textContent. Filtros desconhecidos ou respostas malformadas são recusados.
+
+O JSON conserva registros consultados; o PDF é gerado pela opção PDF/imprimir do navegador e inclui até 100 evidências. Resultados parciais são identificados. Totais abrangem registros lidos, incluindo logs e alertas derivados como entradas distintas. IPs críticos são deduplicados por evento de origem.
+
+Ditado usa Web Speech API quando disponível, com aviso/consentimento por sessão da página. O serviço do navegador pode enviar áudio ao provedor; não é uma transcrição local garantida. O SIEM recebe apenas texto após revisão e Enviar. O microfone para ao fechar, trocar de aba ou atingir 30 segundos. Sem suporte/permissão, a entrada por texto continua funcionando. Documentação: https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition.
+
+Inferências são serializadas com as demais análises, com prazo de 90 segundos, contexto de 8.192 tokens e geração até 1.200 tokens. Duas solicitações de interpretação podem aguardar; excesso recebe resposta de ocupado. Nenhuma pergunta/resposta do painel é persistida pelo SIEM, embora Ollama/provedor do navegador possam ter seus próprios registros. Modelos existentes não são substituídos automaticamente.

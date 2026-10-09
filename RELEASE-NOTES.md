@@ -1,13 +1,13 @@
-# Multipla Siem 1.2.20
+# Multipla Siem 1.2.21
 
-Classificação persistente por descrição: marcar/desmarcar eventos críticos, escolha de áudio e ativação/desativação posterior. Cabeçalhos syslog são ignorados; em mensagens reconhecidas de ataque SSHguard o IP pode variar. As marcações aparecem na dashboard e no histórico. Evidências originais e bloqueios existentes permanecem preservados. Até 128 descrições; alterações futuras começam na primeira marcação, além dos eventos explicitamente selecionados.
+- Painel Pergunte à IA com Ollama local, contexto estruturado da página, seleção do modelo visível e conversa temporária.
+- Busca de logs e relatórios por cliente, palavra/IP e período: filtros revisáveis antes da execução, paginação e exportação JSON/PDF via impressão.
+- Ditado pt-BR no navegador com consentimento, transcrição editável, duração máxima de 30 segundos e envio manual. A disponibilidade depende do navegador; o provedor pode receber o áudio. O SIEM não armazena áudio.
+- Histórico persistente de CPU, RAM e disco da VM nas últimas 24h, com médias de 15 minutos e lacunas sem coleta. Gráfico no popup e na central de notificações.
+- Capacidade total e espaço disponível do filesystem do SIEM em GiB; notificação de pouco espaço (até 10% disponível ou até 1 GiB), sem repetição, e recuperação acima de 12% e 1,25 GiB.
 
-Lista de IPs de origem dos críticos para visualização e download TXT, com períodos de 1h, 6h, 24h ou 7 dias. IP do remetente não é usado como substituto do atacante. Leitura limitada a 64 MiB, 10 segundos e 10.000 eventos críticos; resultado parcial é indicado e não permite download incompleto. Eventos derivados compartilham a contagem com seu evento de origem.
+O assistente usa somente consultas autenticadas e limitadas, com CSRF, validação de filtros, redação de segredos e loopback fixo para o Ollama. Não aceita SQL, ferramentas, URLs externas ou comandos do modelo. Respostas são hipóteses para revisão. Nenhuma alteração é executada.
 
-Até oito cards independentes de recursos, redimensionamento em quatro larguras e altura mínima ajustável de todos os cards. Disposição, dimensões e máquina selecionada salvas por conta. Conteúdo cresce/reorganiza e os cards de recursos se empilham no celular.
+Consultas cobrem até 31 dias dentro da retenção, com limite de leitura de 64 MiB/10 segundos. Buscas mostram 100 registros por página, até offset 10.000; relatórios consultam até 10.000 registros e identificam resultados parciais. A IA recebe uma amostra explícita de até 12 registros; totais são calculados pelo SIEM. Tela/PDF mostram até 100 registros, e JSON preserva os registros consultados. Arquivos ausentes podem representar ausência de coleta ou retenção expirada, nunca confirmação de segurança.
 
-Histórico de recursos e ping por máquina nas últimas 24h, até 1.440 amostras por minuto persistidas no diretório de dados. Uso médio, pico e recursos livres; disponibilidade observada ao ping, latência média ponderada/máxima e perda de pacotes. Três pacotes ICMP por minuto a partir do SIEM para máquinas cadastradas. O histórico começa após a instalação desta versão; faltas de coleta são indicadas como lacunas, não como disponibilidade. ICMP bloqueado não comprova falha do equipamento. O coletor deve fornecer métricas atuais; Proxmox com somente syslog terá dados de ping, sem CPU/RAM.
-
-Indicador superior da VM Linux: CPU, RAM e filesystem do diretório de dados. Alerta a partir de 90%, recuperação abaixo de 85%, estado indisponível explícito. Central com visão das 20 threads de maior consumo observado, sem expor argumentos de comandos, popup e até 200 notificações recentes. Limpar reconhece os avisos pendentes apenas da conta atual e preserva o histórico. Novos avisos posteriores à limpeza permanecem pendentes.
-
-Validação local: suíte Go, parsing de métricas Linux, regras críticas, autenticação/CSRF, persistência e isolamento de preferências/limpeza; compilação Linux amd64 e arm64. Prévia com dados ilustrativos. A coleta real da VM Debian e seus pings será conferida após a atualização.
+Ollama é opcional e externo à atualização. Se falhar, o relatório factual continua disponível. A qualidade e o tempo de respostas precisam ser conferidos com o modelo instalado no servidor. Histórico da VM começa após instalar a versão; não há preenchimento retroativo.

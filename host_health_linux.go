@@ -43,9 +43,13 @@ func sampleHostHealth(ctx context.Context, dir string, previous HostCounters) (H
 		issues = append(issues, "RAM indisponível")
 	}
 	var stat syscall.Statfs_t
-	if err = syscall.Statfs(dir, &stat); err == nil && stat.Blocks > 0 {
+	if err = syscall.Statfs(dir, &stat); err == nil && stat.Blocks > 0 && stat.Bavail <= stat.Blocks && stat.Bsize > 0 {
 		v := float64(stat.Blocks-stat.Bavail) / float64(stat.Blocks) * 100
 		health.Disk = &v
+		total := uint64(stat.Blocks) * uint64(stat.Bsize)
+		free := uint64(stat.Bavail) * uint64(stat.Bsize)
+		health.DiskTotalBytes = &total
+		health.DiskFreeBytes = &free
 	} else {
 		issues = append(issues, "Disco indisponível")
 	}

@@ -28,7 +28,7 @@ jobs:
           CGO_ENABLED: '0'
           GOTELEMETRY: 'off'
         run: |
-          for file in app dashboard device-network critical-controls host-health alert-sounds backup n8n; do node --check "web/$file.js"; done
+          for file in app dashboard device-network critical-controls host-health alert-sounds backup n8n assistant host-chart; do node --check "web/$file.js"; done
           node scripts/test-n8n-workflow.cjs
           go test -mod=vendor ./...
           go vet -mod=vendor ./...

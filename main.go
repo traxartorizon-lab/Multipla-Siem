@@ -1068,7 +1068,7 @@ func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
 		role := a.roleLocked(s.Email)
 
 		a.mu.Unlock()
-		if role != "admin" && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && !(r.Method == "PUT" && r.URL.Path == "/api/dashboard/layout") && !(r.Method == "POST" && r.URL.Path == "/api/notifications/clear") && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export" && r.URL.Path != "/api/events/history" && r.URL.Path != "/api/devices/metrics" && r.URL.Path != "/api/devices/resource-history" && r.URL.Path != "/api/system/health" && r.URL.Path != "/api/notifications" && r.URL.Path != "/api/events/critical-ips" && r.URL.Path != "/api/dashboard/distribution" && r.URL.Path != "/api/dashboard/activity" && r.URL.Path != "/api/reports" && r.URL.Path != "/api/network")) {
+		if role != "admin" && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && !(r.Method == "PUT" && r.URL.Path == "/api/dashboard/layout") && !(r.Method == "POST" && r.URL.Path == "/api/notifications/clear") && !(r.Method == "POST" && (r.URL.Path == "/api/assistant/plan" || r.URL.Path == "/api/assistant/query")) && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export" && r.URL.Path != "/api/events/history" && r.URL.Path != "/api/devices/metrics" && r.URL.Path != "/api/devices/resource-history" && r.URL.Path != "/api/system/health" && r.URL.Path != "/api/system/usage-history" && r.URL.Path != "/api/notifications" && r.URL.Path != "/api/events/critical-ips" && r.URL.Path != "/api/dashboard/distribution" && r.URL.Path != "/api/dashboard/activity" && r.URL.Path != "/api/reports" && r.URL.Path != "/api/network")) {
 			http.Error(w, "Perfil somente visualizacao: operacao nao permitida", 403)
 			return
 		}
@@ -1192,6 +1192,8 @@ func (a *App) routes() http.Handler {
 	a.registerAlertRoutes(mux)
 	a.registerCriticalPatternRoutes(mux)
 	a.registerLocalAIRoutes(mux)
+	a.registerAssistantRoutes(mux)
+	a.registerHostHistoryRoute(mux)
 	a.registerHistoryRoutes(mux)
 	a.registerBackupRoutes(mux)
 	a.registerDashboardRoutes(mux)
@@ -1227,10 +1229,10 @@ func (a *App) routes() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(b)
 	})
-	for _, path := range []string{"style.css", "favicon.svg", "alert-sounds.js", "critical-controls.js", "host-health.js", "device-network.js", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "n8n.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
+	for _, path := range []string{"assistant.js", "host-chart.js", "style.css", "favicon.svg", "alert-sounds.js", "critical-controls.js", "host-health.js", "device-network.js", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "n8n.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
 		p := path
 		mux.HandleFunc("GET /"+p, func(w http.ResponseWriter, r *http.Request) {
-			if p == "host-health.js" || p == "critical-controls.js" || p == "n8n.js" || p == "alert-sounds.js" || p == "device-network.js" || p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" || p == "dashboard.js" || p == "reports.js" || p == "network.js" || p == "ssh.js" || p == "dhcp.js" || p == "test-reports.js" || p == "xterm.js" {
+			if p == "assistant.js" || p == "host-chart.js" || p == "host-health.js" || p == "critical-controls.js" || p == "n8n.js" || p == "alert-sounds.js" || p == "device-network.js" || p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" || p == "dashboard.js" || p == "reports.js" || p == "network.js" || p == "ssh.js" || p == "dhcp.js" || p == "test-reports.js" || p == "xterm.js" {
 				w.Header().Set("Content-Type", "text/javascript")
 			} else if p == "favicon.svg" {
 				w.Header().Set("Content-Type", "image/svg+xml")
@@ -1648,7 +1650,7 @@ func (a *App) routes() http.Handler {
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(self), geolocation=(), payment=()")
 		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
 		if a.secure() {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000")

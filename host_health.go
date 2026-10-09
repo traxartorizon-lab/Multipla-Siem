@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -24,15 +25,17 @@ type HostThread struct {
 	MemoryMB float64 `json:"memory_mb"`
 }
 type HostHealth struct {
-	Time      time.Time    `json:"time"`
-	CPU       *float64     `json:"cpu,omitempty"`
-	Memory    *float64     `json:"memory,omitempty"`
-	Disk      *float64     `json:"disk,omitempty"`
-	DiskPath  string       `json:"disk_path"`
-	Threads   []HostThread `json:"threads"`
-	Error     string       `json:"error,omitempty"`
-	High      bool         `json:"high"`
-	Threshold int          `json:"threshold"`
+	DiskTotalBytes *uint64      `json:"disk_total_bytes,omitempty"`
+	DiskFreeBytes  *uint64      `json:"disk_free_bytes,omitempty"`
+	Time           time.Time    `json:"time"`
+	CPU            *float64     `json:"cpu,omitempty"`
+	Memory         *float64     `json:"memory,omitempty"`
+	Disk           *float64     `json:"disk,omitempty"`
+	DiskPath       string       `json:"disk_path"`
+	Threads        []HostThread `json:"threads"`
+	Error          string       `json:"error,omitempty"`
+	High           bool         `json:"high"`
+	Threshold      int          `json:"threshold"`
 }
 type HostCounters struct {
 	Total   uint64
@@ -75,6 +78,9 @@ func (a *App) updateHostConditions(health HostHealth) {
 			conditions[key] = *value >= 90 || (a.state.HostConditions[key] && *value >= 85)
 		}
 	}
+	if health.Disk != nil {
+		conditions["Disco"] = lowHostDisk(health, a.state.HostConditions["Disco"])
+	}
 	if health.Error != "" {
 		conditions["Coleta do servidor"] = true
 	} else {
@@ -98,6 +104,9 @@ func (a *App) updateHostConditions(health HostHealth) {
 			title = key + " exige atenção"
 			severity = "critical"
 			detail = "Uso de recurso atingiu 90% ou a medição está indisponível."
+			if key == "Disco" && health.DiskFreeBytes != nil {
+				detail = fmt.Sprintf("Pouco espaço no filesystem do SIEM: %.2f GiB disponíveis. Limite: até 10%% livre ou até 1 GiB.", float64(*health.DiskFreeBytes)/(1<<30))
+			}
 			if key == "Armazenamento do SIEM" {
 				detail = a.storageError
 			}
@@ -113,6 +122,7 @@ func (a *App) hostHealthWorker() {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 		a.mu.Lock()
 		previous := a.hostPrevious
+		previousTime := a.hostHealth.Time
 		dir := a.cfg.DataDir
 		demo := a.demo
 		a.mu.Unlock()
@@ -123,6 +133,8 @@ func (a *App) hostHealthWorker() {
 			a.hostHealth = health
 			a.hostPrevious = counters
 			a.updateHostConditions(health)
+			health.High = health.High || a.state.HostConditions["Disco"]
+			a.hostHealth = health
 			if a.notificationDirty {
 				if a.persist() == nil {
 					a.notificationDirty = false
@@ -131,6 +143,13 @@ func (a *App) hostHealthWorker() {
 				}
 			}
 			a.mu.Unlock()
+			if previousTime.Truncate(time.Minute) != health.Time.Truncate(time.Minute) {
+				if err := a.recordHostUsage(dir, health); err != nil {
+					a.mu.Lock()
+					a.storageError = "Falha ao salvar histórico de recursos do servidor"
+					a.mu.Unlock()
+				}
+			}
 		}
 		time.Sleep(5 * time.Second)
 	}
