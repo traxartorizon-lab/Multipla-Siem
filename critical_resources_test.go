@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -135,5 +136,34 @@ func TestResourcePingParserAndRetention(t *testing.T) {
 	a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "GET", "/api/devices/resource-history?ip="+ip, nil))
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "interval_seconds") {
 		t.Fatal(w.Code, w.Body.String())
+	}
+}
+
+func TestSecurityOriginsIncludeUnclassifiedHistory(t *testing.T) {
+	messages := []struct{ raw, ip string }{
+		{`<37>1 2026-10-09T12:45:00Z firewall sshguard 1 - - Attack from "107.150.105.116" on service SSH with danger 10.`, "107.150.105.116"},
+		{`sshguard[1]: Blocking "203.0.113.42/32" for 86400 secs`, "203.0.113.42"},
+		{`sshd-session: Invalid user halley from 2001:db8::42 port 47046`, "2001:db8::42"},
+		{`sshguard[1]: Blocking "2001:db8::42/128" for 86400 secs`, "2001:db8::42"},
+		{`application: Blocking "203.0.113.42" for 86400 secs`, ""},
+		{`sshguard[1]: Blocking "192.0.2.0/24" for 86400 secs`, ""},
+	}
+	a := testApp(t)
+	for i, m := range messages {
+		if got := securityLogSourceIP(m.raw); got != m.ip {
+			t.Fatalf("%s: got %s want %s", m.raw, got, m.ip)
+		}
+		if m.ip != "" {
+			a.appendEvent(Event{ID: fmt.Sprintf("security-%d", i), Time: time.Now().Add(-time.Minute), Kind: "generic", Device: "Firewall", Message: m.raw})
+		}
+	}
+	w := httptest.NewRecorder()
+	a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "GET", "/api/events/critical-ips?download=1", nil))
+	if w.Code != 200 || w.Body.String() != "107.150.105.116\n2001:db8::42\n203.0.113.42\n" {
+		t.Fatalf("history export: %d %s", w.Code, w.Body.String())
+	}
+	rows := aggregateCriticalIPs([]Event{{ID: "original", SourceIP: "203.0.113.1"}, {ID: "alert", ParentID: "original", Level: 12, SourceIP: "203.0.113.1"}})
+	if len(rows) != 1 || rows[0].Count != 1 {
+		t.Fatalf("original suppressed alert: %+v", rows)
 	}
 }

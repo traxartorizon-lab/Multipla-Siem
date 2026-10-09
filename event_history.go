@@ -143,7 +143,7 @@ func (a *App) readHistoryEvents(r *http.Request, offset int, matchID string, cri
 				}
 				if criticalOnly {
 					event = classifier.classifiedEvent(event)
-					if event.Level < 12 || (event.Review != nil && event.Review.Status == "false_positive") {
+					if (event.Level < 12 || (event.Review != nil && event.Review.Status == "false_positive")) && !(r.URL.Path == "/api/events/critical-ips" && securityLogSourceIP(event.Message) != "") {
 						continue
 					}
 				}

@@ -16,11 +16,31 @@ function reconcileResourceCards(order){
  grid.querySelectorAll('[data-resource-copy]').forEach(card=>{if(!wanted.has(card.dataset.dashboardCard))card.remove()});
  for(const id of wanted){if([...grid.children].some(c=>c.dataset.dashboardCard===id))continue;const card=resourceTemplate.cloneNode(true);card.dataset.dashboardCard=id;card.dataset.resourceCopy='true';card.querySelectorAll('[id]').forEach(n=>{n.dataset.resourceRole=n.id;n.removeAttribute('id')});grid.append(card);setupDashboardCard(card)}
 }
-function applyDashboardSizes(){for(const card of $('#dashboard-grid').children){const c=dashboardCardSettings[card.dataset.dashboardCard]||{};card.style.setProperty('--card-width',c.width||'');card.style.minHeight=c.height?c.height+'px':'';card.classList.toggle('custom-width',!!c.width);const width=card.querySelector('[aria-label="Largura do card"]'),height=card.querySelector('[aria-label="Altura mínima do card em pixels"]');if(width)width.value=c.width||0;if(height)height.value=c.height||''}}
+function applyDashboardSizes(){for(const card of $('#dashboard-grid').children){const c=dashboardCardSettings[card.dataset.dashboardCard]||{};const ratio=c.width_basis_points || (c.width ? c.width*2500 : 0);card.style.setProperty('--card-basis',ratio?'calc('+ratio/100+'% - '+(12*(1-ratio/10000)).toFixed(3)+'px)':'');card.style.minHeight=c.height?c.height+'px':'';card.classList.toggle('custom-width',!!ratio)}}
+function setupDashboardResize(card){
+ for(const edge of ['right','bottom','corner']){
+  const handle=el('button');handle.type='button';handle.className='dashboard-resize dashboard-resize-'+edge;
+  handle.setAttribute('aria-label',edge==='right'?'Redimensionar largura':edge==='bottom'?'Redimensionar altura':'Redimensionar largura e altura');
+  handle.title='Arraste para redimensionar; use as setas para ajustes';card.append(handle);
+  const update=(width,height)=>{const grid=$('#dashboard-grid'),id=card.dataset.dashboardCard,c={...(dashboardCardSettings[id]||{})};
+   if(edge!=='bottom'){c.width_basis_points=Math.round(Math.min(1,Math.max(Math.min(240,grid.clientWidth),width)/grid.clientWidth)*10000);delete c.width}
+   if(edge!=='right')c.height=Math.round(Math.max(120,Math.min(2400,height)));
+   dashboardCardSettings[id]=c;applyDashboardSizes();
+  };
+  let drag=null;
+  const finish=(cancel=false)=>{if(!drag)return;if(cancel){if(drag.previous)dashboardCardSettings[card.dataset.dashboardCard]=drag.previous;else delete dashboardCardSettings[card.dataset.dashboardCard];applyDashboardSizes()}
+   const pointer=drag.pointer;drag=null;card.classList.remove('resizing');document.body.classList.remove('dashboard-resizing');if(handle.hasPointerCapture(pointer))handle.releasePointerCapture(pointer);
+  };
+  handle.addEventListener('pointerdown',e=>{if(!dashboardEditing||dashboardSaving||e.button!==0)return;e.preventDefault();const rect=card.getBoundingClientRect();drag={pointer:e.pointerId,x:e.clientX,y:e.clientY,width:rect.width,height:rect.height,previous:dashboardCardSettings[card.dataset.dashboardCard]?structuredClone(dashboardCardSettings[card.dataset.dashboardCard]):null};handle.setPointerCapture(e.pointerId);card.classList.add('resizing');document.body.classList.add('dashboard-resizing')});
+  handle.addEventListener('pointermove',e=>{if(drag&&e.pointerId===drag.pointer)update(drag.width+e.clientX-drag.x,drag.height+e.clientY-drag.y)});
+  handle.addEventListener('pointerup',()=>finish());handle.addEventListener('pointercancel',()=>finish(true));handle.addEventListener('lostpointercapture',()=>finish(true));
+  handle.addEventListener('keydown',e=>{if(e.key==='Escape'&&drag){e.preventDefault();finish(true);return}if(!dashboardEditing||dashboardSaving||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();const rect=card.getBoundingClientRect(),step=e.shiftKey?40:10;update(rect.width+(e.key==='ArrowRight'?step:e.key==='ArrowLeft'?-step:0),rect.height+(e.key==='ArrowDown'?step:e.key==='ArrowUp'?-step:0))});
+ }
+}
 function addResourceCard(){if(!dashboardEditing||dashboardSaving)return;const order=dashboardOrder();const id=Array.from({length:7},(_,i)=>'resources-'+(i+2)).find(id=>!order.includes(id));if(!id){toast('Limite de oito cards de recursos.');return}order.push(id);dashboardCardSettings[id]={width:2};reconcileResourceCards(order);applyDashboardOrder(order);applyDashboardSizes();setDashboardEditing(true);renderDashboardResources(snapshot)}
 const addResourceButton=el('button','Adicionar monitoramento','secondary');addResourceButton.type='button';addResourceButton.hidden=true;$('#dashboard-edit').after(addResourceButton);addResourceButton.onclick=addResourceCard;
 function updateDashboardMoveButtons(){const cards=[...$('#dashboard-grid').children];cards.forEach((card,i)=>{card.querySelector('[data-move="-1"]').disabled=i===0;card.querySelector('[data-move="1"]').disabled=i===cards.length-1})}
-function setDashboardEditing(value){dashboardEditing=value;addResourceButton.hidden=!value;$('#dashboard-grid').classList.toggle('organizing',value);document.querySelectorAll('.dashboard-move-controls').forEach(n=>n.hidden=!value);$('#dashboard-edit').hidden=value;['save','cancel','reset'].forEach(id=>$('#dashboard-'+id).hidden=!value);$('#dashboard-layout-status').textContent=value?'Arraste pela alça, use as setas ou ajuste largura e altura.':'';updateDashboardMoveButtons()}
+function setDashboardEditing(value){dashboardEditing=value;addResourceButton.hidden=!value;$('#dashboard-grid').classList.toggle('organizing',value);document.querySelectorAll('.dashboard-move-controls').forEach(n=>n.hidden=!value);$('#dashboard-edit').hidden=value;['save','cancel','reset'].forEach(id=>$('#dashboard-'+id).hidden=!value);$('#dashboard-layout-status').textContent=value?'Arraste as bordas ou o canto inferior para redimensionar. Use a alça para mover e salve ao terminar.':'';updateDashboardMoveButtons()}
 $('#dashboard-edit').onclick=()=>setDashboardEditing(true);
 $('#dashboard-cancel').onclick=()=>{if(dashboardSaving)return;setDashboardEditing(false);dashboardAppliedKey="";syncDashboardLayout(snapshot?.preferences?.dashboard_order);renderDashboardResources(snapshot)};
 $('#dashboard-reset').onclick=()=>{if(!dashboardSaving){dashboardCardSettings={};reconcileResourceCards([]);applyDashboardOrder(dashboardDefaultOrder);applyDashboardSizes()}};
@@ -36,9 +56,7 @@ $('#dashboard-save').onclick=async()=>{
  finally{dashboardSaving=false;$('#dashboard-save').disabled=false;$('#dashboard-cancel').disabled=false;$('#dashboard-reset').disabled=false}
 };
 function setupDashboardCard(card){
- const tools=card.querySelector('.dashboard-move-controls'),width=el('select'),height=el('input');width.setAttribute('aria-label','Largura do card');for(const [v,t] of [[0,'Automática'],[1,'¼ da tela'],[2,'½ da tela'],[3,'¾ da tela'],[4,'Tela inteira']]){const option=el('option',t);option.value=v;width.append(option)}width.value=dashboardCardSettings[card.dataset.dashboardCard]?.width||0;
- height.type='number';height.min=120;height.max=1200;height.step=20;height.placeholder='Altura auto';height.setAttribute('aria-label','Altura mínima do card em pixels');height.value=dashboardCardSettings[card.dataset.dashboardCard]?.height||'';
- const change=()=>{if(dashboardSaving)return;const id=card.dataset.dashboardCard;dashboardCardSettings[id]={...(dashboardCardSettings[id]||{}),width:Number(width.value),height:Number(height.value)||0};applyDashboardSizes()};width.onchange=change;height.onchange=change;tools.append(width,height);
+ const tools=card.querySelector('.dashboard-move-controls');setupDashboardResize(card);
  if(card.dataset.resourceCopy){const remove=el('button','Remover','secondary');remove.onclick=()=>{if(dashboardSaving)return;delete dashboardCardSettings[card.dataset.dashboardCard];card.remove();updateDashboardMoveButtons()};tools.append(remove)}
 
  card.querySelectorAll('[data-move]').forEach(button=>button.onclick=()=>{

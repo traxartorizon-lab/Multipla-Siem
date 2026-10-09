@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -60,5 +61,26 @@ func TestPFSenseSSHRequiresRepeatedSameIPWithinMinute(t *testing.T) {
 	}
 	if len(b.state.Blocks) != 0 {
 		t.Fatal("old attempts retained")
+	}
+}
+
+func TestRFC5424SSHThreat(t *testing.T) {
+	for _, body := range []string{`Failed password for invalid user halley from 107.150.105.116 port 47046 ssh2`, `Invalid user halley from 107.150.105.116 port 47046`, `Attack from "107.150.105.116" on service SSH with danger 10.`, `Blocking "107.150.105.116/32" for 86400 secs (1 attacks in 0 secs)`} {
+		program := "sshd-session"
+		if strings.HasPrefix(body, "Attack") || strings.HasPrefix(body, "Blocking") {
+			program = "sshguard"
+		}
+		raw := "<38>1 2026-10-09T12:45:00.191776-03:00 MULTIPLAFW.multipla.tec.br " + program + " 59795 - - " + body
+		if pfsenseSSHSource(raw) != "107.150.105.116" || !pfsenseSSHThreat(raw) {
+			t.Fatalf("unrecognized: %s", raw)
+		}
+		a := &App{}
+		e := a.classifiedEvent(Event{Kind: "pfsense", Message: raw})
+		if !e.Alert || e.Level < 12 {
+			t.Fatal("not critical")
+		}
+	}
+	if pfsenseSSHThreat("application: Invalid user halley from 107.150.105.116") {
+		t.Fatal("untrusted program accepted")
 	}
 }

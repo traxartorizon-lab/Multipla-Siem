@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -93,37 +94,48 @@ func assistantInference(ctx context.Context, model, system string, data any, tar
 	if !safeLocalModel(model) {
 		return errors.New("modelo local inválido")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
-	defer cancel()
+	waitCtx, stopWaiting := context.WithTimeout(ctx, 20*time.Second)
+	defer stopWaiting()
 	select {
 	case localInferenceSlot <- struct{}{}:
 		defer func() { <-localInferenceSlot }()
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-waitCtx.Done():
+		return errors.New("Ollama ocupado com outra análise; tente novamente em instantes")
 	}
+	ctx, cancel := context.WithTimeout(ctx, 180*time.Second)
+	defer cancel()
 	input, err := json.Marshal(data)
 	if err != nil || len(input) > 24000 {
 		return errors.New("contexto extenso demais")
 	}
-	body, _ := json.Marshal(map[string]any{"model": model, "stream": false, "think": false, "format": "json", "keep_alive": "10m", "options": map[string]any{"temperature": 0, "num_ctx": 8192, "num_predict": 1200, "num_thread": 2}, "messages": []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": string(input)}}})
+	body, _ := json.Marshal(map[string]any{"model": model, "stream": false, "think": false, "format": "json", "keep_alive": "10m", "options": map[string]any{"temperature": 0, "num_ctx": 4096, "num_predict": 700, "num_thread": min(runtime.NumCPU(), 4)}, "messages": []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": string(input)}}})
 	request, _ := http.NewRequestWithContext(ctx, "POST", localAIURL+"/api/chat", bytes.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
-	response, err := localAIHTTP.Do(request)
+	inferenceClient := *localAIHTTP
+	inferenceClient.Timeout = 185 * time.Second
+	response, err := inferenceClient.Do(request)
 	if err != nil {
-		return errors.New("Ollama não respondeu; confira o modelo e os recursos do servidor")
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return errors.New("Ollama · " + model + ": análise excedeu 180 segundos; reduza o contexto ou selecione um modelo mais rápido")
+		}
+		return errors.New("Ollama · " + model + ": falha de conexão com o serviço local")
 	}
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
-		return errors.New("Ollama recusou a análise")
+		return errors.New("Ollama · " + model + ": serviço retornou HTTP " + strconv.Itoa(response.StatusCode))
 	}
 	var output struct {
-		Done    bool `json:"done"`
-		Message struct {
+		Done       bool   `json:"done"`
+		DoneReason string `json:"done_reason"`
+		Message    struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	}
 	if json.NewDecoder(io.LimitReader(response.Body, 32769)).Decode(&output) != nil || !output.Done || len(output.Message.Content) > 12000 {
 		return errors.New("resposta de IA incompleta ou extensa demais")
+	}
+	if output.DoneReason == "length" {
+		return errors.New("Ollama · " + model + ": resposta cortada pelo limite de geração; não foi possível concluir a interpretação")
 	}
 	decoder := json.NewDecoder(strings.NewReader(output.Message.Content))
 	decoder.DisallowUnknownFields()
@@ -157,7 +169,7 @@ func (a *App) registerAssistantRoutes(mux *http.ServeMux) {
 			http.Error(w, "Pergunta ou contexto inválido", 400)
 			return
 		}
-		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(130 * time.Second))
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(220 * time.Second))
 		select {
 		case assistantSlots <- struct{}{}:
 			defer func() { <-assistantSlots }()
@@ -181,6 +193,7 @@ func (a *App) registerAssistantRoutes(mux *http.ServeMux) {
 			http.Error(w, err.Error(), 502)
 			return
 		}
+		go a.cleanupLegacyOllamaModels(status.Model)
 		plan.Answer = redact(plan.Answer)
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, map[string]any{"plan": plan, "model": status.Model, "clients": clients})
@@ -219,7 +232,7 @@ func (a *App) registerAssistantRoutes(mux *http.ServeMux) {
 			http.Error(w, "Consulta em andamento; tente novamente", 429)
 			return
 		}
-		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(130 * time.Second))
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(220 * time.Second))
 		limit := 100
 		if input.Report {
 			limit = 10000

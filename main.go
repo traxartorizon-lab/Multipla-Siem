@@ -121,6 +121,7 @@ type State struct {
 	NetworkEquipment     []NetworkEquipment         `json:"network_equipment,omitempty"`
 	AlertReviews         map[string]AlertReview     `json:"alert_reviews,omitempty"`
 	InternetAnalysis     bool                       `json:"internet_analysis,omitempty"`
+	OllamaLegacyCleaned  bool                       `json:"ollama_legacy_cleaned,omitempty"`
 	LocalAIModel         string                     `json:"local_ai_model,omitempty"`
 	ModelDiagnoses       map[string]ModelDiagnosis  `json:"model_diagnoses,omitempty"`
 	Accounts             map[string]AccessAccount   `json:"accounts,omitempty"`
@@ -165,6 +166,8 @@ type App struct {
 	aiQueue           chan Event
 	aiPending         map[string]bool
 	aiStatus          localAIStatus
+	aiCleanupRunning  bool
+	aiCleanupTarget   string
 	snmpMu            sync.Mutex
 	snmpDecoders      map[string]snmpDecoder
 	snmpSeen          map[string]time.Time

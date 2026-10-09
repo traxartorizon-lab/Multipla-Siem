@@ -111,3 +111,12 @@ O JSON conserva registros consultados; o PDF é gerado pela opção PDF/imprimir
 Ditado usa Web Speech API quando disponível, com aviso/consentimento por sessão da página. O serviço do navegador pode enviar áudio ao provedor; não é uma transcrição local garantida. O SIEM recebe apenas texto após revisão e Enviar. O microfone para ao fechar, trocar de aba ou atingir 30 segundos. Sem suporte/permissão, a entrada por texto continua funcionando. Documentação: https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition.
 
 Inferências são serializadas com as demais análises, com prazo de 90 segundos, contexto de 8.192 tokens e geração até 1.200 tokens. Duas solicitações de interpretação podem aguardar; excesso recebe resposta de ocupado. Nenhuma pergunta/resposta do painel é persistida pelo SIEM, embora Ollama/provedor do navegador possam ter seus próprios registros. Modelos existentes não são substituídos automaticamente.
+
+
+## Ajustes 1.2.22
+
+Selecione o modelo local qwen3:4b-instruct instalado e teste Pergunte à IA. A disponibilidade em /api/tags não comprova que uma resposta foi concluída. A interface informa o modelo e as falhas; a interpretação do log não executa ações.
+
+O assistente aguarda vaga por até 20 segundos e gera por até 180 segundos, com contexto 4096 e até quatro threads. A análise automática continua limitada a 90 segundos. Reduzir o contexto visível e o histórico evita sobrecarga; dados omitidos são indicados como contexto parcial.
+
+Após uma resposta validada pelo assistente ou diagnóstico usando qwen3:4b-instruct, o SIEM remove uma única vez os modelos antigos qwen3:0.6b e qwen3:4b via API local do Ollama. A limpeza preserva o selecionado e qualquer outro modelo, registra auditoria e não apaga diretórios diretamente. Para voltar a usar os antigos, baixe-os novamente com ollama pull. Camadas compartilhadas podem reduzir o espaço efetivamente liberado.

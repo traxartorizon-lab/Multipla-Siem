@@ -93,7 +93,7 @@ func validateDashboardSettings(cards map[string]DashboardCardSettings) error {
 		if err := validateDashboardOrder([]string{id}); err != nil {
 			return err
 		}
-		if c.Width < 0 || c.Width > 4 || c.Height < 0 || c.Height > 1200 || (c.Height > 0 && c.Height < 120) || len(c.Device) > 64 {
+		if c.WidthBasisPoints < 0 || c.WidthBasisPoints > 10000 || c.Width < 0 || c.Width > 4 || c.Height < 0 || c.Height > 2400 || (c.Height > 0 && c.Height < 120) || len(c.Device) > 64 {
 			return errors.New("dimensões inválidas")
 		}
 		if c.Device != "" && id != "resources" && !validExtraResourceID(id) {

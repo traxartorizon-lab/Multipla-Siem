@@ -20,9 +20,10 @@ import (
 const backupLimit = 1024 * 1024
 
 type DashboardCardSettings struct {
-	Width  int    `json:"width,omitempty"`
-	Height int    `json:"height,omitempty"`
-	Device string `json:"device,omitempty"`
+	Width            int    `json:"width,omitempty"`
+	WidthBasisPoints int    `json:"width_basis_points,omitempty"`
+	Height           int    `json:"height,omitempty"`
+	Device           string `json:"device,omitempty"`
 }
 
 type Preferences struct {

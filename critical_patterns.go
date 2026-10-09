@@ -38,19 +38,41 @@ func criticalDescription(message string) string {
 	}
 	return strings.TrimSpace(body)
 }
-func criticalSourceIP(e Event) string {
-	if strings.Contains(strings.ToLower(e.Message), "sshguard") {
-		if match := sshguardAttackIP.FindStringSubmatch(e.Message); len(match) == 2 {
-			if ip, err := netip.ParseAddr(match[1]); err == nil {
-				return ip.Unmap().String()
-			}
+
+var attackOrigin = regexp.MustCompile(`(?i)\bAttack from\s+["']?([0-9a-f:.]+)["']?(?:\s|$)`)
+var invalidUserOrigin = regexp.MustCompile(`(?i)\bInvalid user\s+\S+\s+from\s+([0-9a-f:.]+)(?:\s|$)`)
+var guardBlockedOrigin = regexp.MustCompile(`(?i)\bBlocking\s+["']?([0-9a-f:.]+)(?:/(32|128))?["']?(?:\s|$)`)
+
+func securityLogSourceIP(message string) string {
+	for _, pattern := range []*regexp.Regexp{attackOrigin, invalidUserOrigin, guardBlockedOrigin} {
+		if pattern == guardBlockedOrigin && !strings.Contains(strings.ToLower(message), "sshguard") {
+			continue
 		}
+		match := pattern.FindStringSubmatch(message)
+		if len(match) < 2 {
+			continue
+		}
+		ip, err := netip.ParseAddr(match[1])
+		if err != nil {
+			continue
+		}
+		if pattern == guardBlockedOrigin && len(match) > 2 && match[2] != "" && ((ip.Is4() && match[2] != "32") || (ip.Is6() && match[2] != "128")) {
+			continue
+		}
+		return ip.Unmap().String()
+	}
+	return ""
+}
+func criticalSourceIP(e Event) string {
+	if ip := securityLogSourceIP(e.Message); ip != "" {
+		return ip
 	}
 	if ip, err := netip.ParseAddr(e.SourceIP); err == nil {
 		return ip.Unmap().String()
 	}
 	return ""
 }
+
 func descriptionKey(message string) string {
 	sum := sha256.Sum256([]byte(criticalDescription(message)))
 	return hex.EncodeToString(sum[:])
@@ -59,6 +81,13 @@ func descriptionKey(message string) string {
 // Only response/notification copies are changed; the journal remains evidence.
 // Call while holding a.mu.
 func (a *App) classifiedEvent(e Event) Event {
+	if e.Kind == "pfsense" && pfsenseSSHThreat(e.Message) {
+		e.Level = 12
+		e.Alert = true
+		if e.Rule == "" {
+			e.Rule = "pfSense · Atividade SSH suspeita"
+		}
+	}
 	if ip := criticalSourceIP(e); ip != "" {
 		e.SourceIP = ip
 	}
@@ -288,6 +317,9 @@ func (a *App) registerCriticalPatternRoutes(mux *http.ServeMux) {
 			http.Error(w, "Falha ao salvar classificação", 500)
 			return
 		}
+		if policy.Critical {
+			a.enqueueLocalAI(event)
+		}
 		writeJSON(w, map[string]bool{"ok": true})
 	}))
 }
@@ -316,14 +348,14 @@ func aggregateCriticalIPs(events []Event) []CriticalIPRow {
 		if seen[id] {
 			continue
 		}
-		seen[id] = true
-		if e.Level < 12 || (e.Review != nil && e.Review.Status == "false_positive") {
+		if securityLogSourceIP(e.Message) == "" && (e.Level < 12 || (e.Review != nil && e.Review.Status == "false_positive")) {
 			continue
 		}
 		ip := criticalSourceIP(e)
 		if ip == "" {
 			continue
 		}
+		seen[id] = true
 		row := rows[ip]
 		if row == nil {
 			row = &CriticalIPRow{IP: ip, Devices: []string{}}
