@@ -36,6 +36,9 @@ func historyTimeRange(r *http.Request, now time.Time) (time.Time, time.Time, err
 
 // Read journals backwards so pagination never depends on the in-memory dashboard window.
 func (a *App) historyEvents(r *http.Request, offset int, matchID string) ([]Event, bool, bool, error) {
+	return a.readHistoryEvents(r, offset, matchID, false, 100)
+}
+func (a *App) readHistoryEvents(r *http.Request, offset int, matchID string, criticalOnly bool, limit int) ([]Event, bool, bool, error) {
 	now := time.Now().UTC()
 	cut, end, rangeErr := historyTimeRange(r, now)
 	if rangeErr != nil {
@@ -50,9 +53,22 @@ func (a *App) historyEvents(r *http.Request, offset int, matchID string) ([]Even
 	if len(client) > 200 {
 		return nil, false, false, errors.New("cliente inválido")
 	}
-	a.mu.Lock()
-	clientIndex := a.eventClientIndex()
-	a.mu.Unlock()
+	var classifier *App
+	var clientIndex map[string]string
+	if matchID == "" {
+		a.mu.Lock()
+		clientIndex = a.eventClientIndex()
+		if criticalOnly {
+			classifier = &App{state: State{CriticalPatterns: map[string]CriticalPattern{}, AlertReviews: map[string]AlertReview{}}}
+			for k, v := range a.state.CriticalPatterns {
+				classifier.state.CriticalPatterns[k] = v
+			}
+			for k, v := range a.state.AlertReviews {
+				classifier.state.AlertReviews[k] = v
+			}
+		}
+		a.mu.Unlock()
+	}
 	for day := end; !day.Before(cut.Truncate(24 * time.Hour)); day = day.AddDate(0, 0, -1) {
 		path := a.journalPath(day)
 		err := regularFile(path)
@@ -125,11 +141,17 @@ func (a *App) historyEvents(r *http.Request, offset int, matchID string) ([]Even
 						continue
 					}
 				}
+				if criticalOnly {
+					event = classifier.classifiedEvent(event)
+					if event.Level < 12 || (event.Review != nil && event.Review.Status == "false_positive") {
+						continue
+					}
+				}
 				matched++
 				if matched <= offset {
 					continue
 				}
-				if len(events) == 100 {
+				if len(events) == limit {
 					f.Close()
 					return events, true, false, nil
 				}
@@ -183,13 +205,14 @@ func (a *App) registerHistoryRoutes(mux *http.ServeMux) {
 					e.Diagnosis = localDiagnosis(marked)
 				}
 			}
-			if e.Diagnosis == nil {
+			if e.Diagnosis == nil && (e.Classification == nil || e.Classification.Critical) {
 				e.Diagnosis = localDiagnosis(*e)
 			}
 			if result, ok := a.state.ModelDiagnoses[diagnosisKey(*e)]; ok {
 				copy := result
 				e.ModelDiagnosis = &copy
 			}
+			*e = a.classifiedEvent(*e)
 		}
 		a.mu.Unlock()
 		w.Header().Set("Cache-Control", "no-store")

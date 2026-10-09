@@ -19,21 +19,31 @@ import (
 
 const backupLimit = 1024 * 1024
 
+type DashboardCardSettings struct {
+	Width  int    `json:"width,omitempty"`
+	Height int    `json:"height,omitempty"`
+	Device string `json:"device,omitempty"`
+}
+
 type Preferences struct {
-	DashboardOrder []string `json:"dashboard_order,omitempty"`
-	DefaultPage    string   `json:"default_page"`
-	RefreshSeconds int      `json:"refresh_seconds"`
-	AlertMinLevel  int      `json:"alert_min_level"`
-	BackupDaily    bool     `json:"backup_daily"`
-	BackupTime     string   `json:"backup_time"`
-	BackupTimezone string   `json:"backup_timezone"`
-	BackupDrive    bool     `json:"backup_drive"`
+	DashboardCards map[string]DashboardCardSettings `json:"dashboard_cards,omitempty"`
+	DashboardOrder []string                         `json:"dashboard_order,omitempty"`
+	DefaultPage    string                           `json:"default_page"`
+	RefreshSeconds int                              `json:"refresh_seconds"`
+	AlertMinLevel  int                              `json:"alert_min_level"`
+	BackupDaily    bool                             `json:"backup_daily"`
+	BackupTime     string                           `json:"backup_time"`
+	BackupTimezone string                           `json:"backup_timezone"`
+	BackupDrive    bool                             `json:"backup_drive"`
 }
 
 func defaultPreferences() Preferences {
 	return Preferences{DefaultPage: "overview", RefreshSeconds: 5, AlertMinLevel: 1, BackupTime: "02:00", BackupTimezone: "America/Sao_Paulo"}
 }
 func validatePreferences(p Preferences) error {
+	if err := validateDashboardSettings(p.DashboardCards); err != nil {
+		return err
+	}
 	if err := validateDashboardOrder(p.DashboardOrder); err != nil {
 		return err
 	}

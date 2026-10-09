@@ -76,23 +76,24 @@ type Rule struct {
 	Enabled   bool   `json:"enabled"`
 }
 type Event struct {
-	ParentID       string          `json:"parent_id,omitempty"`
-	Diagnosis      *Diagnosis      `json:"diagnosis,omitempty"`
-	Review         *AlertReview    `json:"review,omitempty"`
-	ModelDiagnosis *ModelDiagnosis `json:"model_diagnosis,omitempty"`
-	Protocol       string          `json:"protocol,omitempty"`
-	SenderIP       string          `json:"sender_ip,omitempty"`
-	CEF            *CEFEvent       `json:"cef,omitempty"`
-	Detector       string          `json:"detector,omitempty"`
-	ID             string          `json:"id"`
-	Time           time.Time       `json:"time"`
-	Device         string          `json:"device"`
-	Kind           string          `json:"kind"`
-	SourceIP       string          `json:"source_ip"`
-	Message        string          `json:"message"`
-	Level          int             `json:"level"`
-	Rule           string          `json:"rule"`
-	Alert          bool            `json:"alert"`
+	Classification *CriticalClassification `json:"classification,omitempty"`
+	ParentID       string                  `json:"parent_id,omitempty"`
+	Diagnosis      *Diagnosis              `json:"diagnosis,omitempty"`
+	Review         *AlertReview            `json:"review,omitempty"`
+	ModelDiagnosis *ModelDiagnosis         `json:"model_diagnosis,omitempty"`
+	Protocol       string                  `json:"protocol,omitempty"`
+	SenderIP       string                  `json:"sender_ip,omitempty"`
+	CEF            *CEFEvent               `json:"cef,omitempty"`
+	Detector       string                  `json:"detector,omitempty"`
+	ID             string                  `json:"id"`
+	Time           time.Time               `json:"time"`
+	Device         string                  `json:"device"`
+	Kind           string                  `json:"kind"`
+	SourceIP       string                  `json:"source_ip"`
+	Message        string                  `json:"message"`
+	Level          int                     `json:"level"`
+	Rule           string                  `json:"rule"`
+	Alert          bool                    `json:"alert"`
 }
 type Block struct {
 	IP      string    `json:"ip"`
@@ -106,31 +107,35 @@ type Audit struct {
 	Action string    `json:"action"`
 }
 type State struct {
-	N8N               N8NSettings                `json:"n8n,omitempty"`
-	N8NOutbox         []N8NDelivery              `json:"n8n_outbox,omitempty"`
-	MetricKeys        map[string]string          `json:"metric_keys,omitempty"`
-	DeviceMetrics     map[string]DeviceTelemetry `json:"device_metrics,omitempty"`
-	TemporaryReports  []TemporaryReport          `json:"temporary_reports,omitempty"`
-	PFSourceMigration bool                       `json:"pf_source_migration,omitempty"`
-	SSHHostKeys       map[string]SSHHostIdentity `json:"ssh_host_keys,omitempty"`
-	NetworkEquipment  []NetworkEquipment         `json:"network_equipment,omitempty"`
-	AlertReviews      map[string]AlertReview     `json:"alert_reviews,omitempty"`
-	InternetAnalysis  bool                       `json:"internet_analysis,omitempty"`
-	LocalAIModel      string                     `json:"local_ai_model,omitempty"`
-	ModelDiagnoses    map[string]ModelDiagnosis  `json:"model_diagnoses,omitempty"`
-	Accounts          map[string]AccessAccount   `json:"accounts,omitempty"`
-	Receivers         ReceiverSettings           `json:"receivers"`
-	SNMPClocks        map[string]SNMPClock       `json:"snmp_clocks,omitempty"`
-	GoogleSettings    string                     `json:"google_settings_encrypted,omitempty"`
-	LocalAdmin        LocalAdmin                 `json:"local_admin,omitempty"`
-	GoogleSubjects    map[string]string          `json:"google_subjects,omitempty"`
-	Preferences       map[string]Preferences     `json:"preferences,omitempty"`
-	BackupStatus      map[string]BackupStatus    `json:"backup_status,omitempty"`
-	DriveTokens       map[string]string          `json:"drive_tokens_encrypted,omitempty"`
-	Rules             []Rule                     `json:"rules"`
-	Blocks            map[string]Block           `json:"blocks"`
-	Audit             []Audit                    `json:"audit"`
-	BootstrapDigest   string                     `json:"bootstrap_digest,omitempty"`
+	Notifications        []SystemNotification       `json:"notifications,omitempty"`
+	NotificationsCleared map[string]time.Time       `json:"notifications_cleared,omitempty"`
+	HostConditions       map[string]bool            `json:"host_conditions,omitempty"`
+	CriticalPatterns     map[string]CriticalPattern `json:"critical_patterns,omitempty"`
+	N8N                  N8NSettings                `json:"n8n,omitempty"`
+	N8NOutbox            []N8NDelivery              `json:"n8n_outbox,omitempty"`
+	MetricKeys           map[string]string          `json:"metric_keys,omitempty"`
+	DeviceMetrics        map[string]DeviceTelemetry `json:"device_metrics,omitempty"`
+	TemporaryReports     []TemporaryReport          `json:"temporary_reports,omitempty"`
+	PFSourceMigration    bool                       `json:"pf_source_migration,omitempty"`
+	SSHHostKeys          map[string]SSHHostIdentity `json:"ssh_host_keys,omitempty"`
+	NetworkEquipment     []NetworkEquipment         `json:"network_equipment,omitempty"`
+	AlertReviews         map[string]AlertReview     `json:"alert_reviews,omitempty"`
+	InternetAnalysis     bool                       `json:"internet_analysis,omitempty"`
+	LocalAIModel         string                     `json:"local_ai_model,omitempty"`
+	ModelDiagnoses       map[string]ModelDiagnosis  `json:"model_diagnoses,omitempty"`
+	Accounts             map[string]AccessAccount   `json:"accounts,omitempty"`
+	Receivers            ReceiverSettings           `json:"receivers"`
+	SNMPClocks           map[string]SNMPClock       `json:"snmp_clocks,omitempty"`
+	GoogleSettings       string                     `json:"google_settings_encrypted,omitempty"`
+	LocalAdmin           LocalAdmin                 `json:"local_admin,omitempty"`
+	GoogleSubjects       map[string]string          `json:"google_subjects,omitempty"`
+	Preferences          map[string]Preferences     `json:"preferences,omitempty"`
+	BackupStatus         map[string]BackupStatus    `json:"backup_status,omitempty"`
+	DriveTokens          map[string]string          `json:"drive_tokens_encrypted,omitempty"`
+	Rules                []Rule                     `json:"rules"`
+	Blocks               map[string]Block           `json:"blocks"`
+	Audit                []Audit                    `json:"audit"`
+	BootstrapDigest      string                     `json:"bootstrap_digest,omitempty"`
 }
 type Session struct {
 	Subject string
@@ -149,49 +154,53 @@ type bucket struct {
 	Last  time.Time
 }
 type App struct {
-	n8nTestBusy    bool
-	n8nTestLast    time.Time
-	sshTerminals   map[string]*sshTerminal
-	networkTests   map[string]*NetworkTest
-	aiQueue        chan Event
-	aiPending      map[string]bool
-	aiStatus       localAIStatus
-	snmpMu         sync.Mutex
-	snmpDecoders   map[string]snmpDecoder
-	snmpSeen       map[string]time.Time
-	protocolSeen   map[string]time.Time
-	webhookQ       chan Event
-	webhookStatus  string
-	snmpStatus     string
-	backupMu       sync.Mutex
-	driveMu        sync.Mutex
-	analyzer       *localAnalyzer
-	mu             sync.Mutex
-	cfg            Config
-	state          State
-	events         []Event
-	sessions       map[string]Session
-	oauth          map[string]OAuth
-	counters       map[string]bucket
-	seen           map[string]time.Time
-	lastSeen       map[string]time.Time
-	devicePresence map[string]bool
-	total          int64
-	totalDay       string
-	dropped        int64
-	storageError   string
-	mailStatus     string
-	feedSeen       time.Time
-	demo           bool
-	mailQ          chan Event
-	configPath     string
-	origin         string
-	rates          map[string]rateWindow
-	active         map[string]time.Time
-	bootAt         time.Time
-	bootstrapUsed  bool
-	nativeTLS      bool
-	localIPs       map[netip.Addr]bool
+	hostHealth        HostHealth
+	hostPrevious      HostCounters
+	notificationDirty bool
+	resourceHistoryMu sync.Mutex
+	n8nTestBusy       bool
+	n8nTestLast       time.Time
+	sshTerminals      map[string]*sshTerminal
+	networkTests      map[string]*NetworkTest
+	aiQueue           chan Event
+	aiPending         map[string]bool
+	aiStatus          localAIStatus
+	snmpMu            sync.Mutex
+	snmpDecoders      map[string]snmpDecoder
+	snmpSeen          map[string]time.Time
+	protocolSeen      map[string]time.Time
+	webhookQ          chan Event
+	webhookStatus     string
+	snmpStatus        string
+	backupMu          sync.Mutex
+	driveMu           sync.Mutex
+	analyzer          *localAnalyzer
+	mu                sync.Mutex
+	cfg               Config
+	state             State
+	events            []Event
+	sessions          map[string]Session
+	oauth             map[string]OAuth
+	counters          map[string]bucket
+	seen              map[string]time.Time
+	lastSeen          map[string]time.Time
+	devicePresence    map[string]bool
+	total             int64
+	totalDay          string
+	dropped           int64
+	storageError      string
+	mailStatus        string
+	feedSeen          time.Time
+	demo              bool
+	mailQ             chan Event
+	configPath        string
+	origin            string
+	rates             map[string]rateWindow
+	active            map[string]time.Time
+	bootAt            time.Time
+	bootstrapUsed     bool
+	nativeTLS         bool
+	localIPs          map[netip.Addr]bool
 }
 
 var client = &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(r *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
@@ -336,6 +345,9 @@ func newApp(c Config, path string, demo bool) (*App, error) {
 		}
 	} else if !os.IsNotExist(e) {
 		return nil, e
+	}
+	if err := validateCriticalPatterns(a.state.CriticalPatterns); err != nil {
+		return nil, err
 	}
 	if !a.state.PFSourceMigration {
 		found := false
@@ -503,8 +515,9 @@ func (a *App) appendEvent(e Event) bool {
 	a.storageError = ""
 	a.remember(e)
 	a.enqueueLocalAI(e)
-	a.queueWebhook(e)
-	a.queueN8N(e)
+	a.notifyCriticalEvent(a.classifiedEvent(e))
+	a.queueWebhook(a.classifiedEvent(e))
+	a.queueN8N(a.classifiedEvent(e))
 	return true
 }
 func sourceIP(raw, kind string) string {
@@ -1055,7 +1068,7 @@ func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
 		role := a.roleLocked(s.Email)
 
 		a.mu.Unlock()
-		if role != "admin" && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && !(r.Method == "PUT" && r.URL.Path == "/api/dashboard/layout") && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export" && r.URL.Path != "/api/events/history" && r.URL.Path != "/api/devices/metrics" && r.URL.Path != "/api/dashboard/distribution" && r.URL.Path != "/api/dashboard/activity" && r.URL.Path != "/api/reports" && r.URL.Path != "/api/network")) {
+		if role != "admin" && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && !(r.Method == "PUT" && r.URL.Path == "/api/dashboard/layout") && !(r.Method == "POST" && r.URL.Path == "/api/notifications/clear") && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export" && r.URL.Path != "/api/events/history" && r.URL.Path != "/api/devices/metrics" && r.URL.Path != "/api/devices/resource-history" && r.URL.Path != "/api/system/health" && r.URL.Path != "/api/notifications" && r.URL.Path != "/api/events/critical-ips" && r.URL.Path != "/api/dashboard/distribution" && r.URL.Path != "/api/dashboard/activity" && r.URL.Path != "/api/reports" && r.URL.Path != "/api/network")) {
 			http.Error(w, "Perfil somente visualizacao: operacao nao permitida", 403)
 			return
 		}
@@ -1177,6 +1190,7 @@ func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
 	a.registerAccountRoutes(mux)
 	a.registerAlertRoutes(mux)
+	a.registerCriticalPatternRoutes(mux)
 	a.registerLocalAIRoutes(mux)
 	a.registerHistoryRoutes(mux)
 	a.registerBackupRoutes(mux)
@@ -1185,6 +1199,8 @@ func (a *App) routes() http.Handler {
 	a.registerNetworkRoutes(mux)
 	a.registerDeviceNetworkRoutes(mux)
 	a.registerDeviceMetricRoutes(mux)
+	a.registerResourceHistoryRoutes(mux)
+	a.registerHostHealthRoutes(mux)
 	a.registerSystemRoutes(mux)
 	a.registerSSHRoutes(mux)
 	a.registerDHCPRoutes(mux)
@@ -1211,10 +1227,10 @@ func (a *App) routes() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(b)
 	})
-	for _, path := range []string{"style.css", "favicon.svg", "alert-sounds.js", "device-network.js", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "n8n.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
+	for _, path := range []string{"style.css", "favicon.svg", "alert-sounds.js", "critical-controls.js", "host-health.js", "device-network.js", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "n8n.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
 		p := path
 		mux.HandleFunc("GET /"+p, func(w http.ResponseWriter, r *http.Request) {
-			if p == "n8n.js" || p == "alert-sounds.js" || p == "device-network.js" || p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" || p == "dashboard.js" || p == "reports.js" || p == "network.js" || p == "ssh.js" || p == "dhcp.js" || p == "test-reports.js" || p == "xterm.js" {
+			if p == "host-health.js" || p == "critical-controls.js" || p == "n8n.js" || p == "alert-sounds.js" || p == "device-network.js" || p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" || p == "dashboard.js" || p == "reports.js" || p == "network.js" || p == "ssh.js" || p == "dhcp.js" || p == "test-reports.js" || p == "xterm.js" {
 				w.Header().Set("Content-Type", "text/javascript")
 			} else if p == "favicon.svg" {
 				w.Header().Set("Content-Type", "image/svg+xml")
@@ -1323,6 +1339,7 @@ func (a *App) routes() http.Handler {
 			if e.Diagnosis == nil {
 				e.Diagnosis = localDiagnosis(e)
 			}
+			e = a.classifiedEvent(e)
 			minute := int(time.Since(e.Time) / time.Minute)
 			if (!e.Alert || e.Kind == "wazuh") && minute >= 0 && minute < 30 {
 				bins[29-minute]++
@@ -1364,7 +1381,20 @@ func (a *App) routes() http.Handler {
 			visibleConfig.MailTo = ""
 			visibleAudit = nil
 		}
-		writeJSON(w, map[string]any{"role": role, "snmp_devices": snmpDevices, "event_clients": a.eventClientIndex(), "preferences": a.preferences(s.Email), "drive_connected": a.state.DriveTokens[strings.ToLower(s.Email)] != "", "analysis": a.analysisSnapshot(), "local_ai": a.localAISnapshot(), "events": evs, "alerts": alerts, "total": total, "bins": bins, "blocks": blocks, "config": visibleConfig, "rules": a.state.Rules, "audit": visibleAudit, "last_seen": a.lastSeen, "device_presence": visiblePresence, "mail_status": a.mailStatus, "storage_error": a.storageError, "dropped": a.dropped, "feed_seen": a.feedSeen, "email": s.Email, "csrf": s.CSRF, "demo": a.demo, "local_account_ready": a.state.LocalAdmin.Hash != "", "google_ready": a.state.GoogleSettings != "" || secret("GOOGLE_CLIENT_ID") != "", "mail_ready": secret("GMAIL_APP_PASSWORD") != ""})
+		memoryIDs := map[string]bool{}
+		for _, e := range a.events {
+			memoryIDs[e.ID] = true
+		}
+		cutoff := time.Now().AddDate(0, 0, -a.cfg.RetentionDays)
+		for _, policy := range a.state.CriticalPatterns {
+			if !memoryIDs[policy.Seed.ID] && !policy.Seed.Time.Before(cutoff) {
+				e := a.classifiedEvent(policy.Seed)
+				if e.Level >= 12 && (e.Review == nil || e.Review.Status != "false_positive") {
+					alerts++
+				}
+			}
+		}
+		writeJSON(w, map[string]any{"role": role, "snmp_devices": snmpDevices, "event_clients": a.eventClientIndex(), "preferences": a.preferences(s.Email), "drive_connected": a.state.DriveTokens[strings.ToLower(s.Email)] != "", "analysis": a.analysisSnapshot(), "local_ai": a.localAISnapshot(), "events": evs, "critical_events": a.criticalDashboardEvents(), "alerts": alerts, "total": total, "bins": bins, "blocks": blocks, "config": visibleConfig, "rules": a.state.Rules, "audit": visibleAudit, "last_seen": a.lastSeen, "device_presence": visiblePresence, "mail_status": a.mailStatus, "storage_error": a.storageError, "dropped": a.dropped, "feed_seen": a.feedSeen, "email": s.Email, "csrf": s.CSRF, "demo": a.demo, "local_account_ready": a.state.LocalAdmin.Hash != "", "google_ready": a.state.GoogleSettings != "" || secret("GOOGLE_CLIENT_ID") != "", "mail_ready": secret("GMAIL_APP_PASSWORD") != ""})
 	}))
 	mux.HandleFunc("PUT /api/config", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		var c Config
@@ -1805,6 +1835,8 @@ func main() {
 	go a.maintenance()
 	go a.localAIWorker()
 	go a.devicePresenceWorker()
+	go a.resourceHistoryWorker()
+	go a.hostHealthWorker()
 	go a.backupScheduler()
 	go a.temporaryReportCleaner()
 	go a.mailWorker()

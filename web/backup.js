@@ -19,7 +19,7 @@ async function renderBackups(){
 }
 function confirmRestore(){return confirm('Restaurar esta configuração e suas regras? As credenciais e o endereço deste servidor serão preservados. Publicação de bloqueios e agendamentos serão pausados para revisão.')}
 form('#preferences-form',f=>api('/api/preferences','PUT',{
- dashboard_order:snapshot.preferences?.dashboard_order||[],default_page:f.get('default_page'),refresh_seconds:Number(f.get('refresh_seconds')),alert_min_level:Number(f.get('alert_min_level')),
+ dashboard_order:snapshot.preferences?.dashboard_order||[],dashboard_cards:snapshot.preferences?.dashboard_cards||{},default_page:f.get('default_page'),refresh_seconds:Number(f.get('refresh_seconds')),alert_min_level:Number(f.get('alert_min_level')),
  backup_daily:f.has('backup_daily'),backup_time:f.get('backup_time'),backup_timezone:f.get('backup_timezone'),backup_drive:f.has('backup_drive')
 }));
 $('#backup-export').onclick=()=>{location.href='/api/backup/export'};
