@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -163,7 +164,23 @@ func (a *App) criticalDashboardEvents() []Event {
 
 func (a *App) registerCriticalPatternRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/events/critical-ips", a.auth(func(w http.ResponseWriter, r *http.Request) {
-		from, to, rangeErr := historyTimeRange(r, time.Now().UTC())
+		rangeRequest := r
+		if period := r.URL.Query().Get("period"); period != "" {
+			hours, err := strconv.Atoi(period)
+			if err != nil || (hours != 1 && hours != 6 && hours != 24 && hours != 168) {
+				http.Error(w, "Período inválido", 400)
+				return
+			}
+			rangeRequest = r.Clone(r.Context())
+			u := *r.URL
+			q := u.Query()
+			now := time.Now().UTC()
+			q.Set("from", now.Add(-time.Duration(hours)*time.Hour).Format(time.RFC3339Nano))
+			q.Set("to", now.Format(time.RFC3339Nano))
+			u.RawQuery = q.Encode()
+			rangeRequest.URL = &u
+		}
+		from, to, rangeErr := historyTimeRange(rangeRequest, time.Now().UTC())
 		if rangeErr != nil {
 			http.Error(w, rangeErr.Error(), 400)
 			return

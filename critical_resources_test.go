@@ -167,3 +167,13 @@ func TestSecurityOriginsIncludeUnclassifiedHistory(t *testing.T) {
 		t.Fatalf("original suppressed alert: %+v", rows)
 	}
 }
+
+func TestCriticalIPPeriodUsesServerClock(t *testing.T) {
+	a := testApp(t)
+	a.appendEvent(Event{ID: "clock-ip", Time: time.Now().Add(-time.Minute), Message: `sshguard: Attack from "203.0.113.42" on service SSH with danger 2.`, Kind: "generic"})
+	w := httptest.NewRecorder()
+	a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "GET", "/api/events/critical-ips?period=24&to=2099-01-01T00:00:00Z", nil))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "203.0.113.42") {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}

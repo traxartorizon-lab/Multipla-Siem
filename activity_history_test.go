@@ -72,3 +72,36 @@ func TestActivityHistoryCountsOriginalLogsAndAggregation(t *testing.T) {
 		t.Fatal("unauthenticated")
 	}
 }
+
+func TestActivityReadsRecentTailOfLargeJournal(t *testing.T) {
+	a := testApp(t)
+	now := time.Now().UTC().Add(-time.Minute)
+	f, err := os.Create(a.journalPath(now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.Seek(65<<20, 0); err != nil {
+		t.Fatal(err)
+	}
+	f.Write([]byte("\n"))
+	json.NewEncoder(f).Encode(Event{Time: now, Device: "Busy firewall", Message: "recent log"})
+	f.Close()
+	w := httptest.NewRecorder()
+	a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "GET", "/api/dashboard/activity?period=30m&mode=average", nil))
+	var data struct {
+		Series  []activityHistoryGroup `json:"series"`
+		Partial bool                   `json:"partial"`
+	}
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &data) != nil {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	found := false
+	for _, g := range data.Series {
+		if g.Name == "Busy firewall" && g.Total == 1 {
+			found = true
+		}
+	}
+	if !found || !data.Partial {
+		t.Fatalf("recent tail not preserved: %+v", data)
+	}
+}

@@ -12,7 +12,7 @@ function enableBrowserCriticalSound(){alertSoundSettings.enabled=true;$('#alert-
 const criticalIPsButton=el('button','Visualizar e baixar IPs críticos','secondary');criticalIPsButton.type='button';criticalIPsButton.onclick=showCriticalIPs;document.querySelector('[data-dashboard-card="response"]').append(criticalIPsButton);
 async function showCriticalIPs(){
  const dialog=el('dialog',undefined,'critical-dialog'),body=el('div'),close=el('button','Fechar','secondary'),label=el('label','Período'),period=el('select');for(const [value,text]of [[1,'Última hora'],[6,'Últimas 6 horas'],[24,'Últimas 24 horas'],[168,'Últimos 7 dias']]){const o=el('option',text);o.value=value;period.append(o)}period.value='24';label.append(period);close.onclick=()=>dialog.close();dialog.append(el('h2','IPs de eventos críticos'),el('p','IPs de origem de alertas críticos e dos logs Attack from, sshguard Blocking e Invalid user. Não representa uma lista de bloqueios.'),label,body,close);document.body.append(dialog);dialog.onclose=()=>dialog.remove();dialog.showModal();let request=0;
- const load=async()=>{const current=++request;body.replaceChildren(el('p','Consultando histórico…'));const to=new Date(),from=new Date(to.getTime()-Number(period.value)*3600000),query=new URLSearchParams({from:from.toISOString(),to:to.toISOString()});try{const data=await api('/api/events/critical-ips?'+query);if(!dialog.isConnected||current!==request)return;body.replaceChildren();if(data.partial)body.append(el('p','Leitura parcial: limite da consulta atingido. Escolha um período menor para baixar a lista.'));if(!data.ips?.length)body.append(el('p','Nenhum IP de origem identificado nesta janela.'));
+ const load=async()=>{const current=++request;body.replaceChildren(el('p','Consultando histórico…'));const query=new URLSearchParams({period:period.value});try{const data=await api('/api/events/critical-ips?'+query);if(!dialog.isConnected||current!==request)return;body.replaceChildren();if(data.partial)body.append(el('p','Leitura parcial: limite da consulta atingido. Escolha um período menor para baixar a lista.'));if(!data.ips?.length)body.append(el('p','Nenhum IP de origem identificado nesta janela.'));
  for(const row of data.ips||[]){const item=el('div',undefined,'critical-ip-row');item.append(el('strong',row.ip),el('span',row.count+' eventos · '+row.devices.join(', ')),el('small','Último evento: '+date(row.last_seen)));body.append(item)}
  if(!data.partial){const download=el('a','Baixar lista de IPs','button secondary');download.href='/api/events/critical-ips?download=1&from='+encodeURIComponent(data.from)+'&to='+encodeURIComponent(data.to);download.download='ips-eventos-criticos.txt';body.append(download)}
  }catch(error){if(current===request)body.replaceChildren(el('p',error.message))}};period.onchange=load;await load();
@@ -24,7 +24,12 @@ let criticalIPMetricAt=0,criticalIPMetricBusy=false;
 async function refreshCriticalIPMetric(){
  if(criticalIPMetricBusy||Date.now()-criticalIPMetricAt<30000)return;
  criticalIPMetricBusy=true;criticalIPMetricAt=Date.now();
- try {const data=await api('/api/events/critical-ips');$('#metric-blocks').textContent=(data.partial?'≥ ':'')+(data.ips||[]).length;$('#mode-label').textContent=data.partial?'Últimas 24h · consulta parcial':'IPs únicos · últimas 24 horas'}
+ try {const data=await api('/api/events/critical-ips?period=24');renderCriticalIPPreview(data);$('#metric-blocks').textContent=(data.partial?'≥ ':'')+(data.ips||[]).length;$('#mode-label').textContent=data.partial?'Últimas 24h · consulta parcial':'IPs únicos · últimas 24 horas'}
  catch(error){$('#metric-blocks').textContent='—';$('#mode-label').textContent='Não foi possível consultar os IPs';criticalIPMetricAt=0}
  finally{criticalIPMetricBusy=false}
+}
+
+const criticalIPPreview=el('div',undefined,'critical-ip-preview');criticalIPPreview.setAttribute('aria-label','Prévia dos IPs de origem');criticalIPsButton.before(criticalIPPreview);
+function renderCriticalIPPreview(data){criticalIPPreview.replaceChildren();const rows=data.ips||[];if(!rows.length){criticalIPPreview.append(el('p',data.partial?'Nenhum IP encontrado na parte consultada.':'Nenhum IP encontrado no período.'));return}
+ rows.slice(0,5).forEach(row=>{const item=el('div',undefined,'critical-ip-preview-row');item.append(el('strong',row.ip),el('span',row.count+' ocorrências'));criticalIPPreview.append(item)});if(rows.length>5)criticalIPPreview.append(el('small','Mais '+(rows.length-5)+' IPs na lista completa.'));
 }

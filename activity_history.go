@@ -1,9 +1,8 @@
 package main
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -79,48 +78,69 @@ func (a *App) serveActivityHistory(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "historico indisponivel", 503)
 			return
 		}
-		reader := &io.LimitedReader{R: file, N: remaining + 1}
-		scan := bufio.NewScanner(reader)
-		scan.Buffer(make([]byte, 65536), 256<<10)
-		for scan.Scan() {
-			if r.Context().Err() != nil {
-				file.Close()
-				return
-			}
-			if reader.N <= 1 || time.Now().After(deadline) {
+
+		stat, err := file.Stat()
+		if err != nil {
+			file.Close()
+			http.Error(w, "historico indisponivel", 503)
+			return
+		}
+		position := stat.Size()
+		carry := []byte{}
+		for position > 0 {
+			if remaining <= 0 || time.Now().After(deadline) || r.Context().Err() != nil {
 				partial = true
 				break
 			}
-			var event Event
-			if json.Unmarshal(scan.Bytes(), &event) != nil || event.Alert || event.Time.Before(start) || event.Time.After(end) {
-				continue
+			size := min(int64(64<<10), position, remaining)
+			position -= size
+			remaining -= size
+			chunk := make([]byte, size)
+			if _, err := file.ReadAt(chunk, position); err != nil {
+				partial = true
+				break
 			}
-			name := event.Device
-			if name == "" {
-				name = "Dispositivo não identificado"
-			}
-			if groups[name] == nil {
-				if len(groups) >= 256 {
-					name = "Outros dispositivos"
+			chunk = append(chunk, carry...)
+			lines := bytes.Split(chunk, []byte{'\n'})
+			first := 0
+			if position > 0 {
+				carry = append([]byte{}, lines[0]...)
+				first = 1
+				if len(carry) > 256<<10 {
 					partial = true
+					break
+				}
+			}
+			for i := len(lines) - 1; i >= first; i-- {
+				var event Event
+				if json.Unmarshal(lines[i], &event) != nil || event.Alert || event.Time.Before(start) || event.Time.After(end) {
+					continue
+				}
+				name := event.Device
+				if name == "" {
+					name = "Dispositivo não identificado"
 				}
 				if groups[name] == nil {
-					groups[name] = make([]int, minutes)
+					if len(groups) >= 256 {
+						name = "Outros dispositivos"
+						partial = true
+					}
+					if groups[name] == nil {
+						groups[name] = make([]int, minutes)
+					}
+				}
+				index := int(event.Time.Sub(start) / time.Minute)
+				if index >= 0 && index < minutes {
+					groups[name][index]++
 				}
 			}
-			index := int(event.Time.Sub(start) / time.Minute)
-			if index >= 0 && index < minutes {
-				groups[name][index]++
-			}
 		}
-		if scan.Err() != nil {
-			partial = true
-		}
-		remaining -= (remaining + 1 - reader.N)
 		file.Close()
-		if partial && remaining <= 0 {
+		if remaining <= 0 {
+			partial = true
 			break
 		}
+
 	}
 	times := make([]time.Time, count)
 	for i := range times {

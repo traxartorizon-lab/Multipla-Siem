@@ -1,14 +1,11 @@
-# Multipla Siem 1.2.22
+# Multipla Siem 1.2.23
 
-## 1.2.22
+## 1.2.23
 
-Cards da dashboard redimensionados continuamente pelas bordas e pelo canto inferior, com dimensões proporcionais à área e altura mínima que preserva o conteúdo. Preferências anteriores compatíveis; visualização móvel empilhada.
+Dashboard com arraste pelo cabeçalho e encaixe automático dos cards, preservando redimensionamento pelas bordas, preferências da conta e visualização móvel. Conteúdo mantém altura mínima e quebra de texto.
 
-Central de notificações prioriza a lista, com saúde da VM em coluna compacta à direita e processos recolhidos. Em telas menores, notificações aparecem primeiro.
+Gráfico de atividade lê os registros mais recentes primeiro, evitando que o limite de leitura do histórico consuma a consulta antes de chegar aos logs atuais.
 
-Reconhecimento dos registros SSH RFC5424 do pfSense; atividade SSH suspeita classificada como crítica. Captura dos IPs de origem de Attack from, sshguard Blocking e Invalid user, inclusive no histórico, IPv4/IPv6 e sem substituir pelo IP do remetente. Card de IPs conta origens únicas nas últimas 24h e permite consulta/download; consultas parciais são identificadas.
+Prévia dos IPs críticos no card e no popup, com download separado. Períodos rápidos usam o relógio do servidor. Versão exibida no painel acompanha a versão instalada.
 
-Críticos manuais e automáticos encaminhados à interpretação do Ollama, com evidência original e indicação distinta de diagnóstico por regras. Pergunte à IA usa contexto reduzido, até quatro threads, espera por vaga de até 20s e inferência de até 180s. Erros identificam modelo, conexão, HTTP e truncamento. Respostas são hipóteses para revisão.
-
-Limpeza única dos modelos substituídos qwen3:0.6b e qwen3:4b após resposta validada do qwen3:4b-instruct, somente enquanto este permanece selecionado. Mantém modelos personalizados e registra remoções na auditoria. Não instala modelos automaticamente.
-
+Alerta global POSSIVEL TENTATIVA DE INVASAO após dez falhas de senha SSH do mesmo IP em menos de um minuto, inclusive entre dispositivos. Não conta novamente o registro Invalid user correspondente. Popup vermelho com sirene mediante habilitação de áudio no navegador, consulta aos eventos e controles para silenciar/fechar. Intervalo de um minuto entre avisos por IP; não aplica bloqueio automático.
