@@ -14,15 +14,17 @@ import (
 )
 
 type CriticalPattern struct {
-	Critical bool      `json:"critical"`
-	Sound    bool      `json:"sound"`
-	Started  time.Time `json:"started"`
-	Updated  time.Time `json:"updated"`
-	Seed     Event     `json:"seed"`
+	Critical  bool      `json:"critical"`
+	Sound     bool      `json:"sound"`
+	SoundType string    `json:"sound_type,omitempty"`
+	Started   time.Time `json:"started"`
+	Updated   time.Time `json:"updated"`
+	Seed      Event     `json:"seed"`
 }
 type CriticalClassification struct {
-	Critical bool `json:"critical"`
-	Sound    bool `json:"sound"`
+	Critical  bool   `json:"critical"`
+	Sound     bool   `json:"sound"`
+	SoundType string `json:"sound_type,omitempty"`
 }
 
 var syslog5424Description = regexp.MustCompile(`^<\d{1,3}>\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(?:-|\[[^\]]*\])\s*`)
@@ -104,7 +106,7 @@ func (a *App) classifiedEvent(e Event) Event {
 		}
 	}
 	if policy, ok := a.state.CriticalPatterns[descriptionKey(e.Message)]; ok && (!policy.Critical || e.ID == policy.Seed.ID || !e.Time.Before(policy.Started) || (e.Review != nil && e.Review.Level >= 12)) {
-		e.Classification = &CriticalClassification{Critical: policy.Critical, Sound: policy.Sound}
+		e.Classification = &CriticalClassification{Critical: policy.Critical, Sound: policy.Sound, SoundType: policy.SoundType}
 		if policy.Critical {
 			e.Level = 15
 			e.Alert = true
@@ -163,6 +165,7 @@ func (a *App) criticalDashboardEvents() []Event {
 }
 
 func (a *App) registerCriticalPatternRoutes(mux *http.ServeMux) {
+	a.registerCriticalSoundRoutes(mux)
 	mux.HandleFunc("GET /api/events/critical-ips", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		rangeRequest := r
 		if period := r.URL.Query().Get("period"); period != "" {
@@ -224,13 +227,14 @@ func (a *App) registerCriticalPatternRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("PUT /api/events/{id}/critical-pattern", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
-			Critical *bool `json:"critical"`
-			Sound    *bool `json:"sound"`
+			Critical  *bool  `json:"critical"`
+			Sound     *bool  `json:"sound"`
+			SoundType string `json:"sound_type"`
 		}
 		if !decode(w, r, &input) {
 			return
 		}
-		if input.Critical == nil || input.Sound == nil || (!*input.Critical && *input.Sound) {
+		if input.Critical == nil || input.Sound == nil || (!*input.Critical && *input.Sound) || !validCriticalSound(input.SoundType) {
 			http.Error(w, "Informe classificação e som válidos", 400)
 			return
 		}
@@ -285,6 +289,7 @@ func (a *App) registerCriticalPatternRoutes(mux *http.ServeMux) {
 		}
 		now := time.Now().UTC()
 		policy := CriticalPattern{Critical: *input.Critical, Sound: *input.Sound, Started: now, Updated: now, Seed: event}
+		policy.SoundType = input.SoundType
 		if exists {
 			policy.Started = previous.Started
 			policy.Seed = event
@@ -403,7 +408,7 @@ func validateCriticalPatterns(policies map[string]CriticalPattern) error {
 		return errors.New("limite de classificações excedido")
 	}
 	for key, p := range policies {
-		if p.Seed.ID == "" || p.Seed.Time.IsZero() || len(p.Seed.Message) > 16384 || criticalDescription(p.Seed.Message) == "" || key != descriptionKey(p.Seed.Message) || p.Started.IsZero() || p.Updated.Before(p.Started) || (!p.Critical && p.Sound) {
+		if p.Seed.ID == "" || p.Seed.Time.IsZero() || len(p.Seed.Message) > 16384 || criticalDescription(p.Seed.Message) == "" || key != descriptionKey(p.Seed.Message) || p.Started.IsZero() || p.Updated.Before(p.Started) || (!p.Critical && p.Sound) || !validCriticalSound(p.SoundType) {
 			return errors.New("classificação crítica inválida")
 		}
 	}

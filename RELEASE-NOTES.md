@@ -1,12 +1,10 @@
-# Multipla Siem 1.2.28
+# Multipla Siem 1.2.29
 
-## 1.2.28
+## 1.2.29
 
-Ollama exclusivamente sob demanda para eventos. Remove a fila de diagnósticos generativos, o enfileiramento na ingestão/classificação/revisão e o reprocessamento periódico do histórico. A verificação de disponibilidade consulta apenas os modelos instalados, sem carregar ou gerar texto. Mantém coleta, regras, correlação, notificações e diagnóstico imediato da base local; interpretações antigas são preservadas.
+Alertas sonoros por descrição: escolha entre bipe, sirene e o som padrão do navegador ao configurar um evento crítico. Gerenciar alertas sonoros na guia Eventos permite ouvir, trocar o som, ativar ou desativar somente o áudio e excluir a classificação crítica daquela descrição, preservando o histórico original. Alertas silenciados permanecem disponíveis para reativação. Configurações são persistidas no servidor e compatíveis com backups anteriores.
 
-Rodapé de cada evento oferece Pergunte à IA. Abre o assistente com uma pergunta sugerida e somente o log escolhido como contexto, com limite e indicação de truncamento. Abrir a janela não inicia inferência: é preciso clicar Enviar. Permite perguntar novamente sobre o evento e desmarcar a inclusão do contexto. O assistente geral continua disponível. Conversas são temporárias e não executam ações.
+Saída de áudio selecionável nas configurações do navegador/computador: escolha uma saída disponibilizada pelo navegador ou pelo seletor nativo, quando suportado. Não solicita acesso ao microfone. Se a saída escolhida estiver indisponível, informa o problema sem tocar silenciosamente na saída padrão. Navegadores sem suporte exibem orientação para usar o mixer de volume do sistema. A preferência de saída permanece local ao navegador.
 
-Configurações informa o modo sob demanda, sem indicadores de uma fila automática inexistente. Pesquisa externa automática fica indisponível neste modo. Consultas e relatórios solicitados pelo usuário continuam usando suas interpretações explícitas. Apenas uma inferência por vez, mantendo limites de CPU, contexto, prazo e permissões.
-
-Validação inclui ingestão de crítico sem chamada ao Ollama, análise local preservada, contexto limitado ao evento escolhido, sintaxe JavaScript, testes gerais e revisão visual.
+Validação: testes de persistência, silenciamento, exclusão sem apagar evidência, permissões de leitura/escrita, tipo de som inválido, seleção de saída, dispositivo indisponível, sintaxe JavaScript, testes gerais e revisão visual. Compatibilidade com hardware e permissões reais deve ser validada no computador do usuário.
 
