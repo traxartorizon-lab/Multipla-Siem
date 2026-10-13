@@ -1,6 +1,8 @@
 // Only this fixed login1 operation. No service management, shell or privilege elevation.
 polkit.addRule(function(action, subject) {
-    if (subject.user === "multipla-siem" && action.id === "org.freedesktop.login1.reboot") {
+    if (subject.user === "multipla-siem" &&
+        (action.id === "org.freedesktop.login1.reboot" ||
+         action.id === "org.freedesktop.login1.reboot-multiple-sessions")) {
         return polkit.Result.YES;
     }
 });

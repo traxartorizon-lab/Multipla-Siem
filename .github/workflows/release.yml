@@ -30,6 +30,7 @@ jobs:
         run: |
           for file in app dashboard device-network critical-controls host-health alert-sounds backup n8n assistant host-chart ssh collectors server-terminal; do node --check "web/$file.js"; done
           node scripts/test-n8n-workflow.cjs
+          node scripts/test-reboot-policy.cjs
           go test -mod=vendor ./...
           go vet -mod=vendor ./...
           mkdir -p dist
