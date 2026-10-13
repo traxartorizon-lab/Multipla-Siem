@@ -1,10 +1,10 @@
-# Multipla Siem 1.2.29
+# Multipla Siem 1.2.30
 
-## 1.2.29
+## 1.2.30
 
-Alertas sonoros por descrição: escolha entre bipe, sirene e o som padrão do navegador ao configurar um evento crítico. Gerenciar alertas sonoros na guia Eventos permite ouvir, trocar o som, ativar ou desativar somente o áudio e excluir a classificação crítica daquela descrição, preservando o histórico original. Alertas silenciados permanecem disponíveis para reativação. Configurações são persistidas no servidor e compatíveis com backups anteriores.
+Instalador Linux/Proxmox assistido: verifica systemd 247+, Python 3.8+ e certificados CA; instala apenas dependências ausentes via APT em Debian/Ubuntu/Proxmox. Mostra etapas, valida sintaxe e unidades systemd, envia a primeira coleta pelo serviço restrito e confirma aceitação HTTP pelo SIEM antes de habilitar o timer. Faz até três tentativas; falha não é apresentada como sucesso e preserva arquivos para revisão.
 
-Saída de áudio selecionável nas configurações do navegador/computador: escolha uma saída disponibilizada pelo navegador ou pelo seletor nativo, quando suportado. Não solicita acesso ao microfone. Se a saída escolhida estiver indisponível, informa o problema sem tocar silenciosamente na saída padrão. Navegadores sem suporte exibem orientação para usar o mixer de volume do sistema. A preferência de saída permanece local ao navegador.
+Modos --verify para testar envio e agendamento e --repair para reconstruir código, unidades e permissões mantendo configuração e chave. Reparo recusa links simbólicos e arquivos de outro proprietário. Não muda o firewall, políticas Tailscale, chave ou verificação TLS. Diagnósticos seguros distinguem chave recusada, certificado inválido e falha de conexão, sem registrar tokens.
 
-Validação: testes de persistência, silenciamento, exclusão sem apagar evidência, permissões de leitura/escrita, tipo de som inválido, seleção de saída, dispositivo indisponível, sintaxe JavaScript, testes gerais e revisão visual. Compatibilidade com hardware e permissões reais deve ser validada no computador do usuário.
+Instruções de download atualizadas. CI valida sintaxe Bash e simula instalação aceita, falha nas três tentativas sem ativação do timer e reparo de instalação existente. Validação do coletor e testes gerais executados; execução real em systemd/hardware do usuário ocorre no teste inicial do instalador.
 

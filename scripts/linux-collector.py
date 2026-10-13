@@ -8,6 +8,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+import urllib.error
 
 
 def cpu_snapshot():
@@ -111,6 +112,19 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+    except urllib.error.HTTPError as error:
+        explanations = {401: 'Chave recusada: gere/confira a chave individual do dispositivo.',
+                        403: 'Envio proibido: confira chave, dispositivo e permissoes.',
+                        404: 'Dispositivo ou endpoint nao encontrado: confira IP cadastrado e versao do SIEM.',
+                        429: 'SIEM limitou as requisicoes: aguarde e tente novamente.'}
+        print(explanations.get(error.code, 'SIEM recusou a coleta (HTTP %d).' % error.code), file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as error:
+        if isinstance(error.reason, ssl.SSLCertVerificationError):
+            print('Certificado HTTPS nao confiavel ou invalido: confira dominio, validade, relogio e certificados CA. A verificacao TLS permanece ativa.', file=sys.stderr)
+        else:
+            print('Conexao HTTPS indisponivel: confira DNS, Tailscale, firewall e porta 8443.', file=sys.stderr)
+        sys.exit(1)
     except Exception:
         # Never log exception content, request headers or bearer tokens.
         print('Coleta/envio indisponivel. Verifique HTTPS, chave e acesso ao SIEM.', file=sys.stderr)
