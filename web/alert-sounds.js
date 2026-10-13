@@ -42,10 +42,18 @@ async function refreshAlertOutputs(){
  if(typeof HTMLMediaElement.prototype.setSinkId!=='function'){alertOutputSelect.disabled=true;alertOutputChoose.disabled=true;alertOutputHelp.textContent='Este navegador não permite escolher a saída pelo SIEM. Use o mixer de volume do sistema para direcionar o navegador às caixas de som.';return}
  try{const devices=await navigator.mediaDevices.enumerateDevices();let index=0;for(const device of devices.filter(d=>d.kind==='audiooutput'&&d.deviceId&&d.deviceId!=='default')){const option=el('option',device.label||'Saída de áudio '+(++index));option.value=device.deviceId;alertOutputSelect.append(option)}}catch{}
  if(alertOutputDevice&&!Array.from(alertOutputSelect.options).some(o=>o.value===alertOutputDevice)){const saved=el('option','Saída salva — selecione novamente se indisponível');saved.value=alertOutputDevice;alertOutputSelect.append(saved)}alertOutputSelect.value=alertOutputDevice;
- if(typeof navigator.mediaDevices?.selectAudioOutput!=='function'){alertOutputChoose.disabled=true;alertOutputHelp.textContent='Selecione uma saída disponibilizada pelo navegador. Se suas caixas de som não aparecerem, use o mixer de volume do sistema para escolher a saída do navegador.'}
+ if(typeof navigator.mediaDevices?.selectAudioOutput!=='function'){alertOutputChoose.textContent='Autorizar lista de saídas';alertOutputChoose.disabled=typeof navigator.mediaDevices?.getUserMedia!=='function';alertOutputHelp.textContent='No Chrome/Edge, listar saídas pode exigir permissão de microfone. Clique em Autorizar lista de saídas: o acesso será encerrado imediatamente, sem gravar nem enviar áudio. Depois escolha a saída acima. Você pode usar o mixer do sistema se preferir não autorizar.'}
 }
 alertOutputSelect.onchange=()=>saveAlertOutput(alertOutputSelect.value);
-alertOutputChoose.onclick=async()=>{try{const device=await navigator.mediaDevices.selectAudioOutput({deviceId:alertOutputDevice});saveAlertOutput(device.deviceId);await refreshAlertOutputs()}catch{alertSoundStatus('Seleção de saída cancelada ou indisponível.')}};
+alertOutputChoose.onclick=async()=>{
+ alertOutputChoose.disabled=true;
+ try{
+  if(typeof navigator.mediaDevices?.selectAudioOutput==='function'){const device=await navigator.mediaDevices.selectAudioOutput({deviceId:alertOutputDevice});saveAlertOutput(device.deviceId)}
+  else {const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});stream.getTracks().forEach(track=>track.stop());alertSoundStatus('Permissão concedida. Escolha a saída de áudio e clique em Testar e habilitar áudio.')}
+  await refreshAlertOutputs();alertOutputSelect.focus();
+ }catch{alertSoundStatus('Permissão cancelada ou indisponível. Confira a permissão de microfone do site ou use o mixer do sistema.')}
+ finally{if(typeof HTMLMediaElement.prototype.setSinkId==='function')alertOutputChoose.disabled=false}
+};
 navigator.mediaDevices?.addEventListener('devicechange',refreshAlertOutputs);refreshAlertOutputs();
 
 let invasionAccount='',invasionSeen=new Set(),invasionPopup=null;
