@@ -64,7 +64,7 @@ O modelo padrão qwen3:0.6b tem download de aproximadamente 523 MB (https://olla
 
 
 
-O SIEM verifica disponibilidade a cada 30 segundos e tenta diagnosticar os críticos recentes ainda sem resposta. Uma inferência por vez, no máximo 64 trabalhos enfileirados, prazo de 90 segundos e saída limitada. Modelo indisponível, resposta incompleta ou saturação são informados no painel. Todo crítico mantém o diagnóstico imediato da base local; não há garantia de inferência generativa para todo evento sob volume ilimitado ou indisponibilidade. Somente os eventos retidos na janela podem ser recuperados automaticamente pela fila. Resultados gerados e avaliações são preservados no estado do SIEM, com limites de 2.000 registros de cada tipo.
+O SIEM verifica disponibilidade a cada 30 segundos e tenta diagnosticar os críticos recentes ainda sem resposta. Uma inferência por vez, no máximo 64 trabalhos enfileirados, prazo de 180 segundos e saída limitada. Modelo indisponível, resposta incompleta ou saturação são informados no painel. Todo crítico mantém o diagnóstico imediato da base local; não há garantia de inferência generativa para todo evento sob volume ilimitado ou indisponibilidade. Somente os eventos retidos na janela podem ser recuperados automaticamente pela fila. Resultados gerados e avaliações são preservados no estado do SIEM, com limites de 2.000 registros de cada tipo.
 
 
 
@@ -95,7 +95,7 @@ São usados até três resumos do índice de busca, com links das fontes, como c
 
 ## VM com 8 GiB / 4 CPUs
 
-Para testar um modelo maior, execute `ollama pull qwen3:4b` no Debian e selecione qwen3:4b em Configurações → Diagnósticos e IA local → Salvar modelo. Mantenha o 0.6b como alternativa. A qualidade e o tempo devem ser comparados com dados reais; memória/CPU variam com contexto e carga. As inferências do SIEM são serializadas, contexto de 3.072 tokens, geração até 600 tokens e prazo de 90 segundos. O qwen3:4b não é baixado ou selecionado automaticamente.
+Para testar um modelo maior, execute `ollama pull qwen3:4b` no Debian e selecione qwen3:4b em Configurações → Diagnósticos e IA local → Salvar modelo. Mantenha o 0.6b como alternativa. A qualidade e o tempo devem ser comparados com dados reais; memória/CPU variam com contexto e carga. As inferências do SIEM são serializadas, contexto de 3.072 tokens, geração até 600 tokens e prazo de 180 segundos. O qwen3:4b não é baixado ou selecionado automaticamente.
 
 Consultas DHCP e relatórios temporários usam somente o Ollama local, sem pesquisa externa. A captura e os comandos não são controlados pelo modelo. Em muitos servidores, a interpretação usa uma amostra explícita de até quatro registros; a lista completa permanece na tela/relatório. A IA não determina autorização dos servidores DHCP e não substitui revisão técnica.
 
@@ -110,13 +110,25 @@ O JSON conserva registros consultados; o PDF é gerado pela opção PDF/imprimir
 
 Ditado usa Web Speech API quando disponível, com aviso/consentimento por sessão da página. O serviço do navegador pode enviar áudio ao provedor; não é uma transcrição local garantida. O SIEM recebe apenas texto após revisão e Enviar. O microfone para ao fechar, trocar de aba ou atingir 30 segundos. Sem suporte/permissão, a entrada por texto continua funcionando. Documentação: https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition.
 
-Inferências são serializadas com as demais análises, com prazo de 90 segundos, contexto de 8.192 tokens e geração até 1.200 tokens. Duas solicitações de interpretação podem aguardar; excesso recebe resposta de ocupado. Nenhuma pergunta/resposta do painel é persistida pelo SIEM, embora Ollama/provedor do navegador possam ter seus próprios registros. Modelos existentes não são substituídos automaticamente.
+Inferências são serializadas com as demais análises, com prazo de 180 segundos, contexto de 8.192 tokens e geração até 1.200 tokens. Duas solicitações de interpretação podem aguardar; excesso recebe resposta de ocupado. Nenhuma pergunta/resposta do painel é persistida pelo SIEM, embora Ollama/provedor do navegador possam ter seus próprios registros. Modelos existentes não são substituídos automaticamente.
 
 
 ## Ajustes 1.2.22
 
 Selecione o modelo local qwen3:4b-instruct instalado e teste Pergunte à IA. A disponibilidade em /api/tags não comprova que uma resposta foi concluída. A interface informa o modelo e as falhas; a interpretação do log não executa ações.
 
-O assistente aguarda vaga por até 20 segundos e gera por até 180 segundos, com contexto 4096 e até quatro threads. A análise automática continua limitada a 90 segundos. Reduzir o contexto visível e o histórico evita sobrecarga; dados omitidos são indicados como contexto parcial.
+O assistente aguarda vaga por até 20 segundos e gera por até 180 segundos, com contexto 4096 e até quatro threads. A análise automática continua limitada a 180 segundos. Reduzir o contexto visível e o histórico evita sobrecarga; dados omitidos são indicados como contexto parcial.
 
 Após uma resposta validada pelo assistente ou diagnóstico usando qwen3:4b-instruct, o SIEM remove uma única vez os modelos antigos qwen3:0.6b e qwen3:4b via API local do Ollama. A limpeza preserva o selecionado e qualquer outro modelo, registra auditoria e não apaga diretórios diretamente. Para voltar a usar os antigos, baixe-os novamente com ollama pull. Camadas compartilhadas podem reduzir o espaço efetivamente liberado.
+
+
+## 1.2.27
+
+Diagnóstico automático do Ollama com até 180 segundos de geração e cliente HTTP de 185 segundos, corrigindo cancelamentos aos 90 segundos em modelos executados na CPU. Espera pela vaga de inferência separada, até 20 segundos; mantém apenas uma inferência por vez e a fila limitada. Modelo ocupado não é tratado como serviço indisponível.
+
+Geração usa até quatro threads, conforme CPUs disponíveis. Contexto mantido em 3072 tokens e teto de 600 tokens de saída; prompt solicita JSON conciso, até três verificações e três sugestões. Não altera o modelo selecionado, não instala pesos e não executa ações sugeridas.
+
+Configurações mostra a última falha de geração, mesmo quando o modelo instalado é reconhecido. A indicação é limpa após uma geração bem-sucedida ou mudança de modelo. Erros HTTP são identificados sem exibir o corpo bruto da resposta. Diagnóstico imediato pela base local permanece disponível.
+
+Testes cobrem início do prazo após espera, opções de CPU/contexto, cancelamento, liberação da vaga, isolamento do cliente HTTP e indicação de erro HTTP.
+
