@@ -103,10 +103,10 @@ function sshDisplayOutput(view,bytes){
   return '\x1b['+color+'m'+token+'\x1b[39m';
  });
 }
-function createSSHView(data){
+function createSSHView(data,target='#ssh-terminals'){
  for(const [id,old] of sshViews){if(old.closed){old.stopFit?.();old.terminal.dispose();old.card.remove();sshViews.delete(id)}}
  const d=data.equipment,card=el('article',undefined,'panel form-panel ssh-terminal-card'),heading=el('div',undefined,'panel-heading'),status=el('p','Conectando…'),screen=el('div',undefined,'ssh-terminal-screen');
- heading.append(el('h3',d.client+' / '+d.unit+' · '+d.name+' · '+(d.kind==='pfsense'?'pfSense':'Proxmox')));card.append(heading,status,screen);$('#ssh-terminals').append(card);
+ heading.append(el('h3',d.kind==='server'?'Terminal · Servidor SIEM':d.client+' / '+d.unit+' · '+d.name+' · '+(d.kind==='pfsense'?'pfSense':'Proxmox')));card.append(heading,status,screen);$(target).append(card);
  const terminal=new Terminal(sshTerminalOptions());terminal.open(screen);
  // Remote servers may print terminal escapes; never grant clipboard access through OSC 52.
  terminal.parser.registerOscHandler(52,()=>true);terminal.parser.registerOscHandler(8,()=>true);
@@ -114,12 +114,16 @@ function createSSHView(data){
  const focus=el('button','Focar terminal','secondary');focus.type='button';focus.onclick=()=>terminal.focus();heading.append(sshAppearanceControls(card,terminal,()=>view.fit()),focus);const highlight=el('input');highlight.type='checkbox';highlight.checked=true;highlight.onchange=()=>view.highlight=highlight.checked;const highlightLabel=el('label',undefined,'check');highlightLabel.append(highlight,el('span','Realçar IPs, MACs e protocolos'));heading.append(highlightLabel);screen.addEventListener('pointerdown',()=>terminal.focus());screen.tabIndex=0;screen.setAttribute('aria-label','Terminal SSH interativo. Clique para digitar.');
  const close=action('Encerrar sessão',async()=>{await api('/api/ssh/sessions/'+encodeURIComponent(view.id)+'/close','POST',{});view.closed=true;view.stopFit?.();view.terminal.options.disableStdin=true;status.textContent='Sessão encerrada.'});heading.append(close);
  const form=el('form',undefined,'ssh-command-form'),preset=el('select'),empty=el('option','Selecione um teste rápido');empty.value='';preset.append(empty);
- const availableTests=SSH_QUICK_TESTS.filter(item=>!item.kinds||item.kinds.includes(d.kind));
+ const availableTests=d.kind==='server'?[
+  {name:'Estado do SIEM',command:'systemctl status multipla-siem --no-pager -l',help:'Consulta o estado do serviço SIEM.'},
+  {name:'CPU, memória e disco',command:'uptime; free -h; df -h /',help:'Consulta carga, memória e espaço em disco.'},
+  {name:'Estado do Tailscale',command:'tailscale status',help:'Consulta a conexão Tailscale.'}
+ ]:SSH_QUICK_TESTS.filter(item=>!item.kinds||item.kinds.includes(d.kind));
  for(const item of availableTests){const option=el('option',item.name);option.value=item.command;preset.append(option)}
  const label=el('label','Comando · revise antes de enviar'),command=el('textarea');command.rows=3;command.maxLength=8192;command.spellcheck=false;command.autocomplete='off';label.append(command);
  const help=el('p'),send=el('button','Executar no equipamento');send.type='submit';preset.onchange=()=>{command.value=preset.value;command.focus()};const buttons=el('div',undefined,'ssh-quick-buttons');
  for(const item of availableTests){const wrap=el('span',undefined,'ssh-quick-item'),button=el('button',item.name, 'secondary'),tip=el('span',item.help+'\nComando: '+item.command,'ssh-command-tooltip');button.type='button';tip.id='ssh-tip-'+data.id+'-'+buttons.children.length;tip.setAttribute('role','tooltip');button.onclick=()=>{preset.value=item.command;command.value=item.command;command.focus()};const info=el('button','i','ssh-command-info');info.type='button';info.setAttribute('aria-label','Informações sobre '+item.name);info.setAttribute('aria-describedby',tip.id);const infoWrap=el('span',undefined,'ssh-info-wrap');infoWrap.append(info,tip);attachSSHInfoTooltip(infoWrap,info,tip);wrap.append(button,infoWrap);buttons.append(wrap)}
- form.append(buttons,preset,help,label,send,el('p','Revise o comando e seus efeitos. O envio ocorre somente ao clicar em executar.'));const tools=el('details',undefined,'ssh-terminal-tools');tools.append(el('summary','Comandos de diagnóstico deste terminal'),form);card.append(el('p','Clique no terminal para digitar. No menu do pfSense, digite 8 e Enter para abrir o Shell. Ctrl+C interrompe o comando em execução.'),tools);
+ form.append(buttons,preset,help,label,send,el('p','Revise o comando e seus efeitos. O envio ocorre somente ao clicar em executar.'));const tools=el('details',undefined,'ssh-terminal-tools');tools.append(el('summary','Comandos de diagnóstico deste terminal'),form);card.append(el('p',d.kind==='server'?'Clique no terminal para digitar. Use sudo quando necessário; a senha será solicitada pelo próprio servidor. Ctrl+C interrompe o comando em execução.':'Clique no terminal para digitar. No menu do pfSense, digite 8 e Enter para abrir o Shell. Ctrl+C interrompe o comando em execução.'),tools);
  form.onsubmit=event=>{event.preventDefault();run(async()=>{if(view.closed||view.terminal.options.disableStdin)throw Error('Conecte o terminal antes de executar.');const text=command.value.trim();if(!text)throw Error('Informe um comando.');if(/[\x00\x1b]/.test(text))throw Error('Caracteres de controle inválidos.');const bytes=new TextEncoder().encode(text+'\r');for(let i=0;i<bytes.length;i+=4096){const part=bytes.slice(i,i+4096);view.input=view.input.then(()=>api('/api/ssh/sessions/'+encodeURIComponent(view.id)+'/input','POST',{data:sshEncode(part)}));}await view.input;})};
  terminal.onData(text=>{const bytes=new TextEncoder().encode(text);for(let i=0;i<bytes.length;i+=4096){const part=bytes.slice(i,i+4096);view.input=view.input.then(()=>api('/api/ssh/sessions/'+encodeURIComponent(view.id)+'/input','POST',{data:sshEncode(part)})).catch(e=>{status.textContent=e.message})}});
  return view;

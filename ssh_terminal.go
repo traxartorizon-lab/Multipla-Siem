@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,6 +41,8 @@ var sshDial = func(ctx context.Context, address string) (net.Conn, error) {
 	return (&net.Dialer{Timeout: 8 * time.Second}).DialContext(ctx, "tcp", address)
 }
 var sshProbeSlots = make(chan struct{}, 2)
+
+const localServerSSHID = "__multipla_local_server__"
 
 func sshEquipmentAddress(d NetworkEquipment) string {
 	port := d.SSHPort
@@ -86,6 +89,9 @@ func probeSSHIdentity(ctx context.Context, d NetworkEquipment) (SSHHostIdentity,
 	return SSHHostIdentity{d.IP, port, base64.StdEncoding.EncodeToString(key.Marshal()), ssh.FingerprintSHA256(key)}, nil
 }
 func (a *App) sshEquipment(id string) (NetworkEquipment, error) {
+	if id == localServerSSHID {
+		return NetworkEquipment{ID: localServerSSHID, Name: "Servidor SIEM", IP: "127.0.0.1", Kind: "server", SSHPort: 22, Client: "Manutenção", Unit: "Servidor local"}, nil
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for _, d := range a.state.NetworkEquipment {
@@ -319,10 +325,18 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 		}
 		if body.User != "" {
 			d.SSHUser = strings.TrimSpace(body.User)
-			if err := validateEquipment(d); err != nil {
+			valid := regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9_.@-]{0,63}$`).MatchString(d.SSHUser)
+			if d.ID != localServerSSHID {
+				valid = validateEquipment(d) == nil
+			}
+			if !valid {
 				http.Error(w, "Usuário SSH inválido", 400)
 				return
 			}
+		}
+		if d.ID == localServerSSHID && d.SSHUser == "" {
+			http.Error(w, "informe seu usuário Linux para acessar o servidor SIEM", 400)
+			return
 		}
 		var method ssh.AuthMethod
 		if body.PrivateKey != "" {
