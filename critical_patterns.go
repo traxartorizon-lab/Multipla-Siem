@@ -334,9 +334,6 @@ func (a *App) registerCriticalPatternRoutes(mux *http.ServeMux) {
 			http.Error(w, "Falha ao salvar classificação", 500)
 			return
 		}
-		if policy.Critical {
-			a.enqueueLocalAI(event)
-		}
 		writeJSON(w, map[string]bool{"ok": true})
 	}))
 }

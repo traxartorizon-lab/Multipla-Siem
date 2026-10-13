@@ -135,19 +135,22 @@ func TestMarkOrdinaryEventCriticalPreservesEvidence(t *testing.T) {
 	}
 }
 
-func TestClassifiedSSHQueuedForOllama(t *testing.T) {
+func TestClassifiedSSHDoesNotGenerateAutomaticOllama(t *testing.T) {
 	a := testApp(t)
 	a.demo = false
-	a.aiQueue = make(chan Event, 2)
-	a.aiPending = map[string]bool{}
-	e := Event{ID: "ssh-test", Kind: "pfsense", Message: `<38>1 2026-10-09T12:45:00Z firewall sshguard 1 - - Attack from "203.0.113.42" on service SSH with danger 10.`}
-	a.enqueueLocalAI(e)
-	select {
-	case queued := <-a.aiQueue:
-		if queued.Diagnosis == nil || queued.Level < 12 {
-			t.Fatal("missing classified diagnosis")
-		}
-	default:
-		t.Fatal("critical omitted from queue")
+	old := localAIHTTP
+	defer func() { localAIHTTP = old }()
+	calls := 0
+	localAIHTTP = &http.Client{Transport: aiRoundTripper(func(r *http.Request) (*http.Response, error) {
+		calls++
+		t.Error("unexpected inference on ingestion or classification", r.URL)
+		return nil, io.EOF
+	})}
+	e := a.classifiedEvent(Event{ID: "ssh-test", Kind: "pfsense", Time: time.Now(), Message: `<38>1 2026-10-09T12:45:00Z firewall sshguard 1 - - Attack from "203.0.113.42" on service SSH with danger 10.`})
+	if e.Diagnosis == nil || e.Level < 12 {
+		t.Fatal("local rule diagnosis missing")
+	}
+	if !a.appendEvent(e) || calls != 0 || a.localAISnapshot().Pending != 0 {
+		t.Fatal("event storage or on-demand mode invalid")
 	}
 }

@@ -59,7 +59,7 @@ func (a *App) localAISnapshot() localAIStatus {
 	s := a.aiStatus
 	s.Internet = a.state.InternetAnalysis
 	s.ResearchReady = secret("BRAVE_SEARCH_API_KEY") != ""
-	s.Pending = len(a.aiPending)
+	s.Pending = 0
 	if s.Model == "" {
 		s.Model = defaultAIModel
 	}
@@ -130,36 +130,9 @@ func (a *App) probeLocalAI() {
 		for _, m := range models {
 			if m == model {
 				a.aiStatus.Ready = true
-				a.aiStatus.Status = "Modelo local disponível"
+				a.aiStatus.Status = "Modelo local disponível · geração somente sob demanda"
 			}
 		}
-	}
-}
-func (a *App) enqueueLocalAI(e Event) {
-	e = a.classifiedEvent(e)
-	if e.ParentID != "" {
-		for _, original := range a.events {
-			if original.ID == e.ParentID {
-				e.Message = original.Message
-				break
-			}
-		}
-	}
-	if a.demo || e.Diagnosis == nil || a.aiQueue == nil {
-		return
-	}
-	key := diagnosisKey(e)
-	if key == "" || a.aiPending[key] {
-		return
-	}
-	if _, ok := a.state.ModelDiagnoses[key]; ok {
-		return
-	}
-	select {
-	case a.aiQueue <- e:
-		a.aiPending[key] = true
-	default:
-		a.aiStatus.Skipped++
 	}
 }
 func generateLocalDiagnosis(e Event, model string, sources ...ResearchSource) (ModelDiagnosis, error) {
@@ -252,90 +225,17 @@ func generateLocalDiagnosisContext(ctx context.Context, e Event, model string, s
 	}
 	return result, nil
 }
-func (a *App) localAIWorker() {
+
+// Availability checks never load a model or generate text.
+func (a *App) localAIAvailabilityWorker() {
 	if a.demo {
-		a.mu.Lock()
-		a.aiStatus.Status = "Demonstração: base local ativa; IA generativa não consultada"
-		a.mu.Unlock()
 		return
 	}
 	a.probeLocalAI()
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			a.probeLocalAI()
-			a.mu.Lock()
-			if a.aiStatus.Ready {
-				for _, e := range a.events {
-					if len(a.aiQueue) >= cap(a.aiQueue) {
-						break
-					}
-					e = a.classifiedEvent(e)
-					a.enqueueLocalAI(e)
-				}
-			}
-			a.mu.Unlock()
-		case e := <-a.aiQueue:
-			a.mu.Lock()
-			ready := a.aiStatus.Ready
-			model := a.localAISnapshot().Model
-			a.mu.Unlock()
-			var result ModelDiagnosis
-			var sources []ResearchSource
-			researchStatus := ""
-			a.mu.Lock()
-			internet := a.state.InternetAnalysis
-			a.mu.Unlock()
-			if ready && internet {
-				sources, researchStatus = internetResearch(e)
-			}
-			var err error
-			if ready {
-				result, err = generateLocalDiagnosis(e, model, sources...)
-				result.Sources = sources
-				result.ResearchStatus = researchStatus
-			} else {
-				err = errors.New("modelo indisponivel")
-			}
-			a.mu.Lock()
-			key := diagnosisKey(e)
-			if err == nil {
-				a.aiStatus.LastError = ""
-				old := a.state.ModelDiagnoses
-				next := map[string]ModelDiagnosis{}
-				for k, v := range old {
-					next[k] = v
-				}
-				if len(next) >= 2000 {
-					oldest := ""
-					for k, v := range next {
-						if oldest == "" || v.Created.Before(next[oldest].Created) {
-							oldest = k
-						}
-					}
-					delete(next, oldest)
-				}
-				next[key] = result
-				a.state.ModelDiagnoses = next
-				if a.persist() != nil {
-					a.state.ModelDiagnoses = old
-					a.aiStatus.Status = "Diagnóstico gerado, mas não salvo; verifique armazenamento"
-				} else {
-					a.aiStatus.Status = "Interpretação pelo Ollama concluída · hipótese para revisão"
-					go a.cleanupLegacyOllamaModels(model)
-				}
-			} else if errors.Is(err, errLocalDiagnosisBusy) {
-				a.aiStatus.Status = err.Error()
-			} else {
-				a.aiStatus.Ready = false
-				a.aiStatus.LastError = redact(err.Error())
-				a.aiStatus.Status = "IA generativa indisponível ou resposta inválida; base local ativa"
-			}
-			delete(a.aiPending, key)
-			a.mu.Unlock()
-		}
+	for range ticker.C {
+		a.probeLocalAI()
 	}
 }
 func (a *App) registerLocalAIRoutes(mux *http.ServeMux) {
@@ -395,7 +295,7 @@ func (a *App) registerLocalAIRoutes(mux *http.ServeMux) {
 		a.aiStatus.Model = input.Model
 		a.aiStatus.LastError = ""
 		a.aiStatus.Ready = true
-		a.aiStatus.Status = "Modelo local disponível"
+		a.aiStatus.Status = "Modelo local disponível · geração somente sob demanda"
 		writeJSON(w, map[string]bool{"ok": true})
 	}))
 }

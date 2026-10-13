@@ -1,4 +1,4 @@
-# Análise contínua e IA local
+# Diagnósticos por regras e IA sob demanda
 
 
 
@@ -64,7 +64,7 @@ O modelo padrão qwen3:0.6b tem download de aproximadamente 523 MB (https://olla
 
 
 
-O SIEM verifica disponibilidade a cada 30 segundos e tenta diagnosticar os críticos recentes ainda sem resposta. Uma inferência por vez, no máximo 64 trabalhos enfileirados, prazo de 180 segundos e saída limitada. Modelo indisponível, resposta incompleta ou saturação são informados no painel. Todo crítico mantém o diagnóstico imediato da base local; não há garantia de inferência generativa para todo evento sob volume ilimitado ou indisponibilidade. Somente os eventos retidos na janela podem ser recuperados automaticamente pela fila. Resultados gerados e avaliações são preservados no estado do SIEM, com limites de 2.000 registros de cada tipo.
+O SIEM verifica apenas a disponibilidade dos modelos a cada 30 segundos. Receber, classificar ou revisar logs não gera texto nem cria fila de inferência. Use Pergunte à IA no rodapé do evento: a janela inclui somente o log escolhido, limitado e com indicação de truncamento. A geração começa apenas em Enviar, com uma inferência por vez. Perguntas e respostas do assistente são temporárias; interpretações antigas e avaliações já persistidas são preservadas. A base local continua funcionando sem Ollama.
 
 
 
@@ -82,16 +82,9 @@ Referências da base: https://cdn.kernel.org/doc/html/latest/admin-guide/sysctl/
 
 
 
-## Pesquisa complementar opcional
+## Pesquisa externa
 
-
-
-Em Configurações, habilite a pesquisa complementar e configure `BRAVE_SEARCH_API_KEY` em `/etc/multipla-siem/secrets.env`; reinicie o serviço. A chave autentica somente no endpoint HTTPS fixo da Brave Search API. A consulta contém apenas o produto e assinaturas de erros constantes reconhecidas pelo sistema. Nunca contém o log bruto, IPs, MACs, nomes, senhas ou tokens dos eventos. Erros desconhecidos não são enviados. Sem chave, internet ou cota, a análise local continua.
-
-
-
-São usados até três resumos do índice de busca, com links das fontes, como contexto não confiável para o Ollama local. Não há navegação livre do modelo, download de URLs indicadas pelo log ou execução de comandos. A pesquisa não garante causa raiz e as fontes precisam ser revisadas. A configuração é inicialmente desativada. O provedor pode exigir conta e cota de API.
-
+A pesquisa automática complementar está desativada no modo sob demanda. Pergunte à IA usa somente o contexto fornecido ao modelo local; não navega na internet nem executa ferramentas. Configurações e credenciais anteriores são preservadas para compatibilidade, sem consulta automática.
 
 ## VM com 8 GiB / 4 CPUs
 
@@ -131,4 +124,16 @@ Geração usa até quatro threads, conforme CPUs disponíveis. Contexto mantido 
 Configurações mostra a última falha de geração, mesmo quando o modelo instalado é reconhecido. A indicação é limpa após uma geração bem-sucedida ou mudança de modelo. Erros HTTP são identificados sem exibir o corpo bruto da resposta. Diagnóstico imediato pela base local permanece disponível.
 
 Testes cobrem início do prazo após espera, opções de CPU/contexto, cancelamento, liberação da vaga, isolamento do cliente HTTP e indicação de erro HTTP.
+
+
+
+## 1.2.28
+
+Ollama exclusivamente sob demanda para eventos. Remove a fila de diagnósticos generativos, o enfileiramento na ingestão/classificação/revisão e o reprocessamento periódico do histórico. A verificação de disponibilidade consulta apenas os modelos instalados, sem carregar ou gerar texto. Mantém coleta, regras, correlação, notificações e diagnóstico imediato da base local; interpretações antigas são preservadas.
+
+Rodapé de cada evento oferece Pergunte à IA. Abre o assistente com uma pergunta sugerida e somente o log escolhido como contexto, com limite e indicação de truncamento. Abrir a janela não inicia inferência: é preciso clicar Enviar. Permite perguntar novamente sobre o evento e desmarcar a inclusão do contexto. O assistente geral continua disponível. Conversas são temporárias e não executam ações.
+
+Configurações informa o modo sob demanda, sem indicadores de uma fila automática inexistente. Pesquisa externa automática fica indisponível neste modo. Consultas e relatórios solicitados pelo usuário continuam usando suas interpretações explícitas. Apenas uma inferência por vez, mantendo limites de CPU, contexto, prazo e permissões.
+
+Validação inclui ingestão de crítico sem chamada ao Ollama, análise local preservada, contexto limitado ao evento escolhido, sintaxe JavaScript, testes gerais e revisão visual.
 

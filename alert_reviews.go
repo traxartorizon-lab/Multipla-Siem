@@ -78,16 +78,7 @@ func (a *App) registerAlertRoutes(mux *http.ServeMux) {
 			http.Error(w, "Falha ao salvar acompanhamento", 500)
 			return
 		}
-		if value.Level >= 12 && value.Status != "false_positive" {
-			for _, event := range a.events {
-				if event.ID == id {
-					event.Level = value.Level
-					event.Diagnosis = localDiagnosis(event)
-					a.enqueueLocalAI(event)
-					break
-				}
-			}
-		}
+
 		writeJSON(w, map[string]bool{"ok": true})
 	}))
 }

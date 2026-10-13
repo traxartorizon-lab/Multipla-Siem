@@ -163,8 +163,6 @@ type App struct {
 	n8nTestLast       time.Time
 	sshTerminals      map[string]*sshTerminal
 	networkTests      map[string]*NetworkTest
-	aiQueue           chan Event
-	aiPending         map[string]bool
 	aiStatus          localAIStatus
 	aiCleanupRunning  bool
 	aiCleanupTarget   string
@@ -320,8 +318,6 @@ func newApp(c Config, path string, demo bool) (*App, error) {
 	}
 	a := &App{cfg: c, configPath: path, origin: c.PublicURL, demo: demo, state: State{Rules: defaults(), Blocks: map[string]Block{}}, sessions: map[string]Session{}, oauth: map[string]OAuth{}, counters: map[string]bucket{}, seen: map[string]time.Time{}, lastSeen: map[string]time.Time{}, mailQ: make(chan Event, 64)}
 	a.rates = map[string]rateWindow{}
-	a.aiQueue = make(chan Event, 64)
-	a.aiPending = map[string]bool{}
 	a.analyzer = newLocalAnalyzer()
 	a.webhookQ = make(chan Event, 64)
 	a.protocolSeen = map[string]time.Time{}
@@ -519,7 +515,6 @@ func (a *App) appendEvent(e Event) bool {
 	}
 	a.storageError = ""
 	a.remember(e)
-	a.enqueueLocalAI(e)
 	a.notifyCriticalEvent(a.classifiedEvent(e))
 	a.queueWebhook(a.classifiedEvent(e))
 	a.queueN8N(a.classifiedEvent(e))
@@ -1841,7 +1836,7 @@ func main() {
 		log.Fatal(e)
 	}
 	go a.maintenance()
-	go a.localAIWorker()
+	go a.localAIAvailabilityWorker()
 	go a.devicePresenceWorker()
 	go a.resourceHistoryWorker()
 	go a.hostHealthWorker()
