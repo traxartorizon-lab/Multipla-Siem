@@ -30,7 +30,7 @@ if [[ $mode == --verify ]]; then
  echo '[2/5] Validando instalacao existente...'
  systemd-analyze verify /etc/systemd/system/multipla-metrics.service /etc/systemd/system/multipla-metrics.timer
  echo '[3/5] Enviando coleta de teste pelo servico restrito...'
- systemctl reset-failed multipla-metrics.service
+ systemctl reset-failed multipla-metrics.service 2>/dev/null || true
  systemctl start multipla-metrics.service
  [[ $(systemctl show multipla-metrics.service -p Result --value) == success ]]
  echo '[4/5] Verificando agendamento...'
@@ -142,13 +142,13 @@ systemd-analyze verify /etc/systemd/system/multipla-metrics.service /etc/systemd
 systemctl daemon-reload
 stage='primeira coleta HTTPS'
 echo '[4/5] Enviando primeira coleta de teste ao SIEM...'
-systemctl reset-failed multipla-metrics.service
+systemctl reset-failed multipla-metrics.service 2>/dev/null || true
 accepted=false
 for attempt in 1 2 3; do
  if systemctl start multipla-metrics.service && [[ $(systemctl show multipla-metrics.service -p Result --value) == success ]]; then accepted=true; break; fi
  echo "Tentativa $attempt falhou. Diagnostico do coletor:"
  journalctl -u multipla-metrics.service -n 8 --no-pager
- if [[ $attempt -lt 3 ]]; then sleep 3; systemctl reset-failed multipla-metrics.service; fi
+ if [[ $attempt -lt 3 ]]; then sleep 3; systemctl reset-failed multipla-metrics.service 2>/dev/null || true; fi
 done
 [[ $accepted == true ]] || { echo 'Primeira coleta nao aceita. Arquivos preservados; timer nao ativado. Confira HTTPS 8443 no Tailscale, certificado, IP e chave. Apos corrigir, execute --repair.'; exit 1; }
 stage='agendamento'

@@ -21,6 +21,7 @@ class InstallerTests(unittest.TestCase):
             command('systemctl',f'''echo "$*" >>"{trace}"
 case "$1" in
  --version) echo 'systemd 252';;
+ reset-failed) exit 1;;
  show) echo success;;
  start) [[ "$2" != multipla-metrics.service || "${{FAIL_TEST:-0}}" != 1 ]];;
  *) exit 0;;

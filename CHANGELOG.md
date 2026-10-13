@@ -1,5 +1,11 @@
 # Multipla Siem 1.2.24
 
+## 1.2.31
+
+Corrige a primeira instalação Linux: reset-failed é opcional quando o serviço ainda não foi carregado pelo systemd. Mantém obrigatória a coleta aceita antes de confirmar sucesso. Teste de regressão simula reset-failed retornando erro.
+
+Gerenciar alertas sonoros oferece acesso direto a Escolher saída de áudio, abrindo as preferências locais do navegador na Visão geral.
+
 ## 1.2.30
 
 Instalador Linux/Proxmox assistido: verifica systemd 247+, Python 3.8+ e certificados CA; instala apenas dependências ausentes via APT em Debian/Ubuntu/Proxmox. Mostra etapas, valida sintaxe e unidades systemd, envia a primeira coleta pelo serviço restrito e confirma aceitação HTTP pelo SIEM antes de habilitar o timer. Faz até três tentativas; falha não é apresentada como sucesso e preserva arquivos para revisão.
