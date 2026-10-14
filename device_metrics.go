@@ -136,6 +136,10 @@ func (a *App) registerDeviceMetricRoutes(mux *http.ServeMux) {
 			http.NotFound(w, r)
 			return
 		}
+		if len(r.Header.Values("Authorization")) != 1 || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+			http.Error(w, "não autorizado", 401)
+			return
+		}
 		key := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if len(key) < 32 || len(key) > 128 {
 			http.Error(w, "não autorizado", 401)

@@ -393,6 +393,15 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		t := &sshTerminal{id: token(), owner: strings.ToLower(current.Email), equipment: d, status: "connecting", lastRead: time.Now(), cancel: cancel}
+		oldAudit := append([]Audit{}, a.state.Audit...)
+		a.audit(current.Email, "abertura de terminal SSH solicitada: "+d.Name+"; destino="+sshEquipmentAddress(d)+"; usuário="+d.SSHUser)
+		if err := a.persist(); err != nil {
+			a.state.Audit = oldAudit
+			cancel()
+			a.mu.Unlock()
+			http.Error(w, "auditoria indisponível; terminal não iniciado", 503)
+			return
+		}
 		a.sshTerminals[t.id] = t
 		a.mu.Unlock()
 		go a.connectSSHTerminal(ctx, t, method, key)
@@ -509,6 +518,14 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 			return
 		}
 		t.close("Sessão encerrada pelo operador.")
+		a.mu.Lock()
+		a.audit(t.owner, "terminal SSH encerrado pelo operador: "+t.equipment.Name)
+		err := a.persist()
+		a.mu.Unlock()
+		if err != nil {
+			http.Error(w, "terminal encerrado; falha ao persistir auditoria", 503)
+			return
+		}
 		writeJSON(w, map[string]bool{"ok": true})
 	}))
 }

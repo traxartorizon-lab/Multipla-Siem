@@ -18,8 +18,8 @@ jobs:
           persist-credentials: false
       - name: Install pinned Go toolchain
         run: |
-          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' https://go.dev/dl/go1.27.1.linux-amd64.tar.gz -o "$RUNNER_TEMP/go.tar.gz"
-          echo "63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445  $RUNNER_TEMP/go.tar.gz" | sha256sum -c -
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' https://go.dev/dl/go1.27.2.linux-amd64.tar.gz -o "$RUNNER_TEMP/go.tar.gz"
+          echo "ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5  $RUNNER_TEMP/go.tar.gz" | sha256sum -c -
           mkdir "$RUNNER_TEMP/multipla-go"
           tar -xzf "$RUNNER_TEMP/go.tar.gz" -C "$RUNNER_TEMP/multipla-go"
           echo "$RUNNER_TEMP/multipla-go/go/bin" >> "$GITHUB_PATH"
@@ -36,6 +36,7 @@ jobs:
           python3 scripts/test-linux-installer.py
           go test -mod=vendor ./...
           go vet -mod=vendor ./...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
           mkdir -p dist
           for arch in amd64 arm64; do
             GOOS=linux GOARCH="$arch" go build -mod=vendor -buildvcs=false -trimpath -ldflags '-s -w' -o "dist/multipla-siem-linux-$arch" .

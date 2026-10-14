@@ -1,8 +1,10 @@
-# Multipla Siem 1.2.32
+# Multipla Siem 1.2.33
 
-## 1.2.32
+## 1.2.33
 
-Completa a seleção de saídas no Chrome/Edge: Autorizar lista de saídas solicita permissão de microfone somente após clique, encerra imediatamente as faixas de mídia, sem gravação ou envio de áudio, e atualiza a lista de dispositivos. Mantém seletor nativo quando disponível, preferência local e orientação quando permissão é negada. Inclui correção do instalador Linux da 1.2.31.
+Correções da avaliação de segurança: binários e CI usam Go 1.27.2 com SHA256 oficial fixado, substituindo Go 1.27.1 afetado por nove avisos alcançáveis da biblioteca padrão identificados pelo govulncheck. CI passa a bloquear publicação quando a análise oficial encontra vulnerabilidades alcançáveis.
 
-Teste cobre solicitação explícita, encerramento imediato do microfone, atualização da lista e recusa de permissão.
+Endpoint de métricas exige exatamente um cabeçalho Authorization no formato Bearer. Não aceita a chave bruta sem esquema. A chave continua restrita ao dispositivo, com TLS, limites e revogação. Abertura de terminal SSH exige auditoria persistida antes de iniciar; encerramento solicitado pelo operador também gera auditoria, sem registrar senha, chave privada ou comandos.
+
+Regressões incluem acesso sem sessão, privilégio de visualização, CSRF, sessão SSH de outra conta, confusão de credencial de coletor, 19 tentativas por HTTPS real local e falha de persistência da auditoria SSH. Nenhum pentest foi executado contra produção. A revisão não certifica ausência de falhas nem resolve isolamento multiempresa, MFA local, imutabilidade de evidências ou disponibilidade por cota: esses riscos estão documentados no relatório.
 
