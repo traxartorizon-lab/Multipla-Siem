@@ -60,14 +60,14 @@ func (a *App) resolveEventFocus(r *http.Request, id string) (EventFocus, error) 
 	a.mu.Lock()
 	alertsOnly := a.groupLocked(session.Email) == groupAlerts
 	for _, n := range a.state.Notifications {
-		if n.EventID == id && n.Focus != nil {
+		if n.EventID == id && n.Focus != nil && a.scopeLocked(session.Email).notification(n) {
 			f := *n.Focus
 			a.mu.Unlock()
 			return f, nil
 		}
 	}
 	for _, e := range a.events {
-		if e.ID == id {
+		if e.ID == id && a.scopeLocked(session.Email).event(e) {
 			if alertsOnly {
 				e = a.classifiedEvent(e)
 				if !e.Alert && e.Level < 12 {

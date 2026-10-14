@@ -24,7 +24,7 @@ func TestFocusSSHTypeExcludesUnrelatedLogsAndIncludesOtherIPs(t *testing.T) {
 		}
 	}
 	a.events = nil // Focus must survive eviction from live memory through notification metadata.
-	events, more, partial, err := a.historyEvents(httptest.NewRequest("GET", "/api/events/history?focus=trigger", nil), 0, "")
+	events, more, partial, err := a.historyEvents(scopedTestRequest(a,httptest.NewRequest("GET", "/api/events/history?focus=trigger", nil)), 0, "")
 	if err != nil || more || partial || len(events) != 2 {
 		t.Fatal(len(events), more, partial, err)
 	}
@@ -65,11 +65,11 @@ func TestLegacyNotificationFocusResolvesOriginalJournalAndRejectsMissing(t *test
 	}
 	a.events = nil
 	r := httptest.NewRequest("GET", "/api/events/history", nil)
-	f, err := a.resolveEventFocus(r, e.ID)
+	f, err := a.resolveEventFocus(scopedTestRequest(a,r), e.ID)
 	if err != nil || f.Pattern != descriptionKey(e.Message) {
 		t.Fatal(f, err)
 	}
-	if _, err = a.resolveEventFocus(r, "missing"); err == nil {
+	if _, err = a.resolveEventFocus(scopedTestRequest(a,r), "missing"); err == nil {
 		t.Fatal("missing anchor fell back to live feed")
 	}
 }

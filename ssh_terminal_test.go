@@ -104,7 +104,7 @@ func TestSSHUserOverrideValidatedWithoutSavingCredentials(t *testing.T) {
 	for _, tc := range []struct {
 		user string
 		code int
-	}{{"bad;name", 400}, {"admin", 409}} {
+	}{{"bad;name", 400}, {"admin", 400}} {
 		w := httptest.NewRecorder()
 		a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "POST", "/api/ssh/sessions", []byte(`{"id":"equipment","user":"`+tc.user+`","password":"SYNTHETIC_SESSION_SECRET"}`)))
 		if w.Code != tc.code {

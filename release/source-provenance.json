@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "product": "Multipla SIEM",
+  "version": "1.2.35",
+  "repository": "https://github.com/traxartorizon-lab/Multipla-Siem",
+  "go": "1.27.2",
+  "dotnet": "10.0.402",
+  "offlineSigning": "Ed25519",
+  "privateKeyInCI": false,
+  "provenance": "GitHub build attestations attach the publishing commit and artifact hashes",
+  "limits": [
+    "No Authenticode publisher certificate",
+    "External immutable storage deferred",
+    "Production host provisioning must follow SECURITY-RUNBOOK.md"
+  ]
+}

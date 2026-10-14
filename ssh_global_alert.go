@@ -19,7 +19,7 @@ func (a *App) evaluateGlobalSSH(ev Event, raw string) {
 	if ip == "" {
 		return
 	}
-	key := "global-ssh-login|" + ip
+	key := "global-ssh-login|" + ev.Tenant + "|" + ip
 	b, known := a.counters[key]
 	if !known && len(a.counters) >= 10000 {
 		return

@@ -104,14 +104,14 @@ func TestSecurityBootstrapReplayExpirationAndThrottle(t *testing.T) {
 }
 func TestSecurityIdleTimeoutAndDuplicateCookies(t *testing.T) {
 	a := testApp(t)
-	a.sessions["session"] = Session{"", "admin@gmail.com", "csrf", time.Now().Add(time.Hour)}
+	a.sessions["session"] = Session{Email: "admin@gmail.com", CSRF: "csrf", Expires: time.Now().Add(time.Hour)}
 	a.active["session"] = time.Now().Add(-16 * time.Minute)
 	r := testRequest("GET", "/api/snapshot", nil)
 	r.AddCookie(&http.Cookie{Name: a.sessionName(), Value: "session"})
 	if _, ok := a.session(r); ok {
 		t.Fatal("idle session accepted")
 	}
-	a.sessions["session"] = Session{"", "admin@gmail.com", "csrf", time.Now().Add(time.Hour)}
+	a.sessions["session"] = Session{Email: "admin@gmail.com", CSRF: "csrf", Expires: time.Now().Add(time.Hour)}
 	a.active["session"] = time.Now()
 	r.AddCookie(&http.Cookie{Name: a.sessionName(), Value: "attacker"})
 	if _, ok := a.session(r); ok {
@@ -121,7 +121,7 @@ func TestSecurityIdleTimeoutAndDuplicateCookies(t *testing.T) {
 func TestSecuritySessionRotationAndHostCookie(t *testing.T) {
 	a := testApp(t)
 	a.origin = "https://siem.example.com"
-	a.sessions["old"] = Session{"", "admin@gmail.com", "old-csrf", time.Now().Add(time.Hour)}
+	a.sessions["old"] = Session{Email: "admin@gmail.com", CSRF: "old-csrf", Expires: time.Now().Add(time.Hour)}
 	r := testRequest("GET", "https://siem.example.com/", nil)
 	r.AddCookie(&http.Cookie{Name: a.sessionName(), Value: "old"})
 	w := httptest.NewRecorder()
@@ -161,7 +161,7 @@ func TestSecuritySecretNotInSnapshot(t *testing.T) {
 			t.Setenv(name, value)
 		}
 	}
-	a.sessions["session"] = Session{"", "admin@gmail.com", "csrf", time.Now().Add(time.Hour)}
+	a.sessions["session"] = Session{Email: "admin@gmail.com", CSRF: "csrf", Expires: time.Now().Add(time.Hour)}
 	r := testRequest("GET", "/api/snapshot", nil)
 	r.AddCookie(&http.Cookie{Name: a.sessionName(), Value: "session"})
 	w := httptest.NewRecorder()
@@ -172,7 +172,7 @@ func TestSecuritySecretNotInSnapshot(t *testing.T) {
 }
 func TestSecurityJSONAndCrossOrigin(t *testing.T) {
 	a := testApp(t)
-	a.sessions["s"] = Session{"", "admin@gmail.com", "csrf", time.Now().Add(time.Hour)}
+	a.sessions["s"] = Session{Email: "admin@gmail.com", CSRF: "csrf", Expires: time.Now().Add(time.Hour)}
 	r := testRequest("POST", "/api/blocks", strings.NewReader(`{"ip":"198.51.100.1","reason":"test"}`))
 	r.AddCookie(&http.Cookie{Name: a.sessionName(), Value: "s"})
 	r.Header.Set("Origin", a.origin)
@@ -258,7 +258,7 @@ func TestSecurityPathTraversalAndPublicFiles(t *testing.T) {
 			t.Fatalf("public file: %s", path)
 		}
 	}
-	a.sessions["s"] = Session{"", "admin@gmail.com", "csrf", time.Now().Add(time.Hour)}
+	a.sessions["s"] = Session{Email: "admin@gmail.com", CSRF: "csrf", Expires: time.Now().Add(time.Hour)}
 	r := testRequest("GET", "/api/export?day=../../secrets.env", nil)
 	r.AddCookie(&http.Cookie{Name: a.sessionName(), Value: "s"})
 	w := httptest.NewRecorder()

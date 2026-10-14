@@ -1,5 +1,6 @@
 """Exercise installer control flow without root writes, real packages or network."""
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -12,6 +13,8 @@ class InstallerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); commands=root/'bin'; commands.mkdir(); units=root/'units'; units.mkdir(); conf=root/'conf'; code=root/'code'; trace=root/'trace'
             source=(ROOT/'linux-collector-install.sh').read_text().replace('__COLLECTOR_BODY__',(ROOT/'linux-collector.py').read_text())
+            # Signature verification is covered separately against the embedded signed manifest.
+            source=re.sub(r'# BEGIN RELEASE VERIFICATION.*?# END RELEASE VERIFICATION\n','',source,flags=re.S)
             source=source.replace('/run/systemd/system',str(root)).replace('/etc/multipla-siem-collector',str(conf)).replace('/usr/local/lib/multipla-siem-collector',str(code)).replace('/etc/systemd/system',str(units)).replace('/etc/ssl/certs/ca-certificates.crt',str(root/'ca'))
             (root/'ca').write_text('fixture'); installer=root/'installer.sh'; installer.write_text(source)
             def command(name,body):

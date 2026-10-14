@@ -1,0 +1,8 @@
+# Preserve exact bytes used by offline signatures and reproducible embedded assets.
+* -text
+*.ico binary
+*.sig binary
+*.png binary
+*.zip binary
+*.gz binary
+*.iso binary

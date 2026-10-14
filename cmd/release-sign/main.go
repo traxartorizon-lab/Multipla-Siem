@@ -23,6 +23,9 @@ func main() {
 	}
 }
 func run(a []string) error {
+	if a[0] == "sign-assets" {
+		return signAssets(a)
+	}
 	if a[0] == "keygen" && len(a) == 2 {
 		pub, priv, e := ed25519.GenerateKey(rand.Reader)
 		if e != nil {

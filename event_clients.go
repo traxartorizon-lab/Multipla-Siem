@@ -32,6 +32,9 @@ func (a *App) eventClientIndex() map[string]string {
 }
 
 func clientForEvent(index map[string]string, event Event) string {
+	if event.Tenant != "" {
+		return event.Tenant
+	}
 	if client, exists := index["name:"+event.Device]; exists {
 		return client
 	}

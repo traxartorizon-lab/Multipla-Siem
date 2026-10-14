@@ -132,12 +132,12 @@ $('#ssh-connect-form').onsubmit=async e=>{e.preventDefault();const result=$('#ss
  try{
  const selected=sshChosen();if(!selected.length||selected.length>4)throw Error('Selecione de um a quatro equipamentos.');
  const f=new FormData(e.target);credential={user:String(f.get('user')||'').trim(),password:String(f.get('password')||''),private_key:String(f.get('private_key')||''),passphrase:String(f.get('passphrase')||'')};
- if(!credential.password&&!credential.private_key)throw Error('Informe a credencial para esta conexão.');
+ credential={user:'multipla-ops'};
  e.target.elements.password.value='';e.target.elements.private_key.value='';e.target.elements.passphrase.value='';
  const failures=[];let opened=0;
  for(const d of selected){try{result.textContent='Verificando identificação de '+d.name+'…';await sshEnsureTrusted(d);const data=await api('/api/ssh/sessions','POST',{id:d.id,...credential});createSSHView(data);opened++}catch(error){failures.push(d.name+': '+error.message)}}
  result.textContent=(opened?'Solicitadas '+opened+' conexões. Acompanhe o estado nos terminais abaixo. ':'')+failures.join(' · ');if(failures.length)toast(failures.join(' · '));else toast('Conexão solicitada; aguardando autenticação SSH.');
- }catch(error){result.textContent=error.message;toast(error.message)}finally{if(credential){credential.password='';credential.private_key='';credential.passphrase=''}button.disabled=false;renderSSHQuickCatalog()}
+ }catch(error){result.textContent=error.message;toast(error.message)}finally{if(credential){credential={}}button.disabled=false;renderSSHQuickCatalog()}
 };
 async function pollSSHTerminal(view){
  if(view.busy||view.closed)return;view.busy=true;

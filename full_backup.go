@@ -24,7 +24,8 @@ import (
 const recoveryKeyPath = "/root/multipla-siem-recovery.key"
 const fullBackupDirectory = "/var/backups/multipla-siem/full"
 
-var fullRoots = []string{"etc/multipla-siem", "var/lib/multipla-siem", "var/lib/tailscale/tailscaled.state", "usr/local/bin/multipla-siem", "usr/local/lib/multipla-siem/updater", "usr/local/sbin/multipla-update", "etc/systemd/system/multipla-siem.service", "etc/systemd/system/multipla-firstboot.service", "etc/systemd/system/multipla-full-backup.service", "etc/systemd/system/multipla-full-backup.timer"}
+var fullDirectories = []string{"etc/multipla-siem", "var/lib/multipla-siem", "etc/ufw", "etc/ssh/sshd_config.d", "etc/polkit-1/rules.d", "etc/systemd/system/multipla-siem.service.d"}
+var fullRoots = []string{"etc/multipla-siem", "var/lib/multipla-siem", "var/lib/tailscale/tailscaled.state", "usr/local/bin/multipla-siem", "usr/local/lib/multipla-siem/updater", "usr/local/sbin/multipla-update", "etc/systemd/system/multipla-siem.service", "etc/systemd/system/multipla-firstboot.service", "etc/systemd/system/multipla-full-backup.service", "etc/systemd/system/multipla-full-backup.timer", "usr/local/bin/multipla-update", "etc/ufw", "etc/ssh/sshd_config", "etc/ssh/sshd_config.d", "etc/polkit-1/rules.d", "etc/systemd/system/multipla-siem.service.d", "etc/systemd/system/multipla-app-update.service", "etc/systemd/system/multipla-ssh-sign.service", "etc/systemd/system/multipla-isolation.service", "etc/default/ufw"}
 
 type FullRecoveryManifest struct {
 	Product      string `json:"product"`
@@ -40,7 +41,13 @@ func permittedFullPath(name string) bool {
 		return false
 	}
 	for _, root := range fullRoots {
-		if name == root || ((root == "etc/multipla-siem" || root == "var/lib/multipla-siem") && strings.HasPrefix(name, root+"/")) {
+		directory := false
+		for _, allowed := range fullDirectories {
+			if allowed == root {
+				directory = true
+			}
+		}
+		if name == root || (directory && strings.HasPrefix(name, root+"/")) {
 			return true
 		}
 	}
@@ -457,9 +464,6 @@ func runFullBackup(restore, driveEmail, keyFile string, replaceServer bool) erro
 		return err
 	}
 	if restore != "" {
-		if !replaceServer {
-			return errors.New("restauracao total exige -replace-server: desligue o servidor original para nao duplicar sua identidade Tailscale")
-		}
 		if err := os.MkdirAll("/var/backups/multipla-siem", 0700); err != nil {
 			return err
 		}
@@ -488,11 +492,36 @@ func runFullBackup(restore, driveEmail, keyFile string, replaceServer bool) erro
 		if cryptErr != nil {
 			return cryptErr
 		}
-		restart, err := pauseFullServices(true)
+		if !replaceServer {
+			// Fresh recovery keeps the destination identity and does not import the source key.
+			identity := filepath.Join(stage, "var/lib/tailscale/tailscaled.state")
+			if err := os.Remove(identity); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			statePath := filepath.Join(stage, "var/lib/multipla-siem/state.json")
+			raw, err := os.ReadFile(statePath)
+			if err != nil {
+				return err
+			}
+			var restored State
+			if json.Unmarshal(raw, &restored) != nil {
+				return errors.New("estado inválido")
+			}
+			restored.DesktopGrants = nil
+			if err = atomicJSON(statePath, restored); err != nil {
+				return err
+			}
+		}
+		restart, err := pauseFullServices(replaceServer)
 		if err != nil {
 			return err
 		}
-		defer restart()
+		completed := false
+		defer func() {
+			if !completed || replaceServer {
+				restart()
+			}
+		}()
 		checkpoint, err := createFullFile(key)
 		if err != nil {
 			return err
@@ -512,9 +541,17 @@ func runFullBackup(restore, driveEmail, keyFile string, replaceServer bool) erro
 		if err = check.Run(); err != nil {
 			return fmt.Errorf("verificacao da restauracao falhou; checkpoint %s", checkpoint)
 		}
-		if err = restart(); err != nil {
-			return fmt.Errorf("restauracao copiada, reinicio falhou; checkpoint %s", checkpoint)
+		if replaceServer {
+			if err = restart(); err != nil {
+				return fmt.Errorf("restauracao copiada, reinicio falhou; checkpoint %s", checkpoint)
+			}
+		} else {
+			if err = runFullCommand("systemctl", "disable", "multipla-siem"); err != nil {
+				return err
+			}
+			fmt.Println("Recuperação em identidade nova: serviço SIEM permanece parado. Configure o endereço/certificado com multipla-setup, valide a infraestrutura e habilite o serviço. A identidade Tailscale de origem não foi importada.")
 		}
+		completed = true
 		metadata, err := os.ReadFile(filepath.Join(stage, "multipla-recovery.json"))
 		if err != nil {
 			return err

@@ -57,3 +57,19 @@ desktop-package/Multipla.Siem.exe --self-test
 Dependências fixadas e lockfile; fontes NuGet restritas ao registro oficial. Auditoria de vulnerabilidades de todos os pacotes com NU1901–NU1904 tratados como erro. O pacote gerado ainda requer WebView2 Evergreen Runtime instalado. O app portátil local não recebe assinatura Authenticode nesta etapa; não é uma release publicada. A assinatura Windows depende de certificado de assinatura de código próprio, distinto da chave SSH e da chave Ed25519 de release do servidor.
 
 Validação local não substitui ensaio em Debian/systemd/polkit e na estação do usuário. Testar atualização em máquina de homologação antes de habilitar em produção; nenhum update/reboot foi executado no servidor real durante o desenvolvimento.
+
+
+## Versão 1.2.35
+
+Atualize também o servidor. No primeiro login Google/local configure o autenticador. Depois gere nova chave na Central de notificações → Aplicativo Windows; o cadastro MFA invalida os vínculos anteriores. O botão Marcar todas como lidas confirma somente os IDs exibidos; notificações novas continuam pendentes.
+
+Na tela de alertas do painel dentro do app, Escolher saída no Windows e a lista de saídas usam WASAPI/enumeração nativa. Não precisam de microfone. O WebView permanece sem permissão de mídia e com seu áudio silenciado, para evitar sons duplicados. Os alertas usam a saída escolhida e a configuração do app. Testar e habilitar áudio reproduz uma amostra local. A ponte permite somente comandos de áudio, da origem HTTPS configurada; não fornece chaves, cookies, terminal, arquivos ou execução ao JavaScript.
+
+O logotipo Multipla SIEM aparece no executável, nas janelas, na barra de tarefas e na bandeja. Caso exista um atalho fixado da versão antiga, recrie o atalho apontando para o novo executável.
+
+Login Google: browser externo → comparar código → confirmar → conferir conta no app → autenticador no painel. A página de consentimento preserva a origem para o POST protegido; origens null/externas seguem bloqueadas. O botão Cancelar login Google encerra a espera e permite iniciar outra tentativa.
+
+Leia SECURITY-RUNBOOK.md para ativação restrita de isolamento, delegação SSH, recuperação MFA e conferência de artefatos assinados. Não presuma que configurações administrativas do host ou do GitHub foram alteradas pela simples cópia do app.
+
+Padrão de publicação: o título e a bandeja exibem o nome Multipla SIEM seguido da versão compilada; o ZIP inclui a versão de VERSION em seu nome.
+

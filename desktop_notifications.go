@@ -24,7 +24,7 @@ func secretDigest(value string) string {
 }
 func (a *App) desktopAccountDigest(email string) string {
 	account := a.state.Accounts[email]
-	b, _ := json.Marshal([]any{account, a.groupLocked(email), a.state.LocalAdmin, a.state.GoogleSubjects[email]})
+	b, _ := json.Marshal([]any{account, a.groupLocked(email), a.state.LocalAdmin, a.state.GoogleSubjects[email], a.state.MFA[email].EncryptedSecret})
 	return secretDigest(string(b))
 }
 
@@ -43,6 +43,9 @@ func (a *App) desktopGrant(r *http.Request) (DesktopGrant, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for _, grant := range a.state.DesktopGrants {
+		if a.mfaRequired() && a.state.MFA[grant.Owner].EncryptedSecret == "" {
+			continue
+		}
 		if !equal(secretDigest(key), grant.Digest) || !time.Now().Before(grant.Expires) || a.groupLocked(grant.Owner) == "disabled" || !equal(grant.AccountDigest, a.desktopAccountDigest(grant.Owner)) {
 			continue
 		}
@@ -145,12 +148,63 @@ func (a *App) registerDesktopRoutes(mux *http.ServeMux) {
 		cleared := a.state.NotificationsCleared[g.Owner]
 		all, _ := notificationView(a.state.Notifications, cleared)
 		rows := []map[string]any{}
+		scope := a.scopeLocked(g.Owner)
 		for _, n := range all {
+			if !scope.notification(n) {
+				continue
+			}
 			read := !n.Time.After(cleared) || a.state.NotificationReads[g.Owner][n.ID]
-			rows = append(rows, map[string]any{"id": n.ID, "time": n.Time, "title": n.Title, "detail": n.Detail, "severity": n.Severity, "event_id": n.EventID, "read": read})
+			rows = append(rows, map[string]any{"id": n.ID, "time": n.Time, "title": n.Title, "detail": n.Detail, "severity": n.Severity, "event_id": n.EventID, "read": read, "continuous": n.Continuous, "isolation_ip": n.IsolationIP})
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, map[string]any{"notifications": rows, "expires": g.Expires})
+	})
+	mux.HandleFunc("POST /api/desktop/notifications/read-all", func(w http.ResponseWriter, r *http.Request) {
+		g, ok := a.desktopGrant(r)
+		if !ok {
+			http.Error(w, "Vínculo inválido ou expirado", 401)
+			return
+		}
+		var input struct {
+			IDs []string `json:"ids"`
+		}
+		if !decode(w, r, &input) {
+			return
+		}
+		if len(input.IDs) > 200 {
+			http.Error(w, "Limite de notificações", 400)
+			return
+		}
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		valid := map[string]bool{}
+		for _, n := range a.state.Notifications {
+			if a.scopeLocked(g.Owner).notification(n) {
+				valid[n.ID] = true
+			}
+		}
+		if a.state.NotificationReads == nil {
+			a.state.NotificationReads = map[string]map[string]bool{}
+		}
+		old := a.state.NotificationReads[g.Owner]
+		next := map[string]bool{}
+		for id, read := range old {
+			if valid[id] {
+				next[id] = read
+			}
+		}
+		for _, id := range input.IDs {
+			if valid[id] {
+				next[id] = true
+			}
+		}
+		a.state.NotificationReads[g.Owner] = next
+		if a.persist() != nil {
+			a.state.NotificationReads[g.Owner] = old
+			http.Error(w, "Falha ao salvar leitura", 503)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/desktop/notifications/{id}/read", func(w http.ResponseWriter, r *http.Request) {
 		g, ok := a.desktopGrant(r)
@@ -174,7 +228,7 @@ func (a *App) markNotificationRead(w http.ResponseWriter, r *http.Request, owner
 	valid := map[string]bool{}
 	for _, n := range a.state.Notifications {
 		valid[n.ID] = true
-		if n.ID == id {
+		if n.ID == id && a.scopeLocked(owner).notification(n) {
 			exists = true
 		}
 	}

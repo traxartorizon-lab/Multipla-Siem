@@ -87,6 +87,7 @@ func parseReportFilter(r *http.Request) (reportFilter, time.Time, time.Time, err
 	return f, start, end, nil
 }
 func (a *App) buildReport(r *http.Request, filter reportFilter, start, end time.Time) (eventReport, error) {
+	scope := a.requestScope(r)
 	result := eventReport{Filter: filter, Generated: time.Now().UTC(), CriticalBySourceIP: map[string]int{}, ByDevice: map[string]int{}, BySeverity: map[string]int{}, Events: []Event{}, Missing: []string{}}
 	remaining := int64(64 << 20)
 	deadline := time.Now().Add(20 * time.Second)
@@ -129,6 +130,9 @@ func (a *App) buildReport(r *http.Request, filter reportFilter, start, end time.
 				continue
 			}
 			if !filter.cutoff.IsZero() && (event.Time.Before(filter.cutoff) || event.Time.After(time.Now())) {
+				continue
+			}
+			if !scope.event(event) {
 				continue
 			}
 			result.Scanned++

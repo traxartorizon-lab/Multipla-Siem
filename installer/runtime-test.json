@@ -1,0 +1,11 @@
+{
+  "offline": true,
+  "network_devices": 0,
+  "installed_os_boot": true,
+  "latest_payload_manifest": true,
+  "latest_binary_config_check": true,
+  "setup_completed": true,
+  "systemd_service_active": true,
+  "private_credentials_permissions": true,
+  "hostname": "siem.local"
+}

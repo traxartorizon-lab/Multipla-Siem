@@ -94,6 +94,9 @@ func readCredentialValues(path string) (map[string]string, error) {
 	return values, nil
 }
 func validateProduction(c Config) error {
+	if c.RequireMFA != nil && !*c.RequireMFA {
+		return errors.New("produção exige MFA; não desative pela configuração")
+	}
 	if !strings.HasPrefix(c.PublicURL, "https://") {
 		return errors.New("produção exige origem HTTPS; HTTP disponível apenas em -demo")
 	}
@@ -377,14 +380,17 @@ func sanitizeEvent(e Event) Event {
 	}
 	return e
 }
-func streamEventExport(w http.ResponseWriter, r *http.Request, path string) {
+func streamEventExport(w http.ResponseWriter, r *http.Request, path string, scope tenantScope) {
 	f, e := os.Open(path)
 	if e != nil {
 		http.NotFound(w, r)
 		return
 	}
 	defer f.Close()
-	s := bufio.NewScanner(f)
+	limited := &io.LimitedReader{R: f, N: 64 << 20}
+	deadline := time.Now().Add(10 * time.Second)
+	w.Header().Add("Trailer", "X-Multipla-Partial")
+	s := bufio.NewScanner(limited)
 	s.Buffer(make([]byte, 65536), 262144)
 	encoder := json.NewEncoder(w)
 	for s.Scan() {
@@ -397,8 +403,18 @@ func streamEventExport(w http.ResponseWriter, r *http.Request, path string) {
 		if json.Unmarshal(s.Bytes(), &ev) != nil {
 			continue
 		}
+		if time.Now().After(deadline) || limited.N == 0 {
+			w.Header().Set("X-Multipla-Partial", "true")
+			return
+		}
+		if !scope.event(ev) {
+			continue
+		}
 		if encoder.Encode(sanitizeEvent(ev)) != nil {
 			return
 		}
+	}
+	if limited.N == 0 {
+		w.Header().Set("X-Multipla-Partial", "true")
 	}
 }

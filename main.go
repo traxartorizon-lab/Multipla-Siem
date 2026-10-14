@@ -31,7 +31,7 @@ import (
 	"time"
 )
 
-//go:embed web/*
+//go:embed web/* release/collectors/*
 var assets embed.FS
 
 type Device struct {
@@ -44,25 +44,28 @@ type Device struct {
 	Kind      string `json:"kind"`
 }
 type Config struct {
-	SNMP          string   `json:"snmp"`
-	FirstBoot     bool     `json:"first_boot,omitempty"`
-	LocalAnalysis bool     `json:"local_analysis"`
-	Listen        string   `json:"listen"`
-	Syslog        string   `json:"syslog"`
-	PublicURL     string   `json:"public_url"`
-	DataDir       string   `json:"data_dir"`
-	RetentionDays int      `json:"retention_days"`
-	AllowedEmails []string `json:"allowed_emails"`
-	Devices       []Device `json:"devices"`
-	Protected     []string `json:"protected_cidrs"`
-	AutoBlock     bool     `json:"auto_block"`
-	BlockMinutes  int      `json:"block_minutes"`
-	MailTo        string   `json:"mail_to"`
-	MailMinLevel  int      `json:"mail_min_level"`
-	FeedAllowed   []string `json:"feed_allowed_cidrs"`
-	TLSCert       string   `json:"tls_cert"`
-	TLSKey        string   `json:"tls_key"`
-	MaxDailyMB    int      `json:"max_daily_mb"`
+	SyslogTLS      string   `json:"syslog_tls,omitempty"`
+	SyslogClientCA string   `json:"syslog_client_ca,omitempty"`
+	RequireMFA     *bool    `json:"require_mfa,omitempty"`
+	SNMP           string   `json:"snmp"`
+	FirstBoot      bool     `json:"first_boot,omitempty"`
+	LocalAnalysis  bool     `json:"local_analysis"`
+	Listen         string   `json:"listen"`
+	Syslog         string   `json:"syslog"`
+	PublicURL      string   `json:"public_url"`
+	DataDir        string   `json:"data_dir"`
+	RetentionDays  int      `json:"retention_days"`
+	AllowedEmails  []string `json:"allowed_emails"`
+	Devices        []Device `json:"devices"`
+	Protected      []string `json:"protected_cidrs"`
+	AutoBlock      bool     `json:"auto_block"`
+	BlockMinutes   int      `json:"block_minutes"`
+	MailTo         string   `json:"mail_to"`
+	MailMinLevel   int      `json:"mail_min_level"`
+	FeedAllowed    []string `json:"feed_allowed_cidrs"`
+	TLSCert        string   `json:"tls_cert"`
+	TLSKey         string   `json:"tls_key"`
+	MaxDailyMB     int      `json:"max_daily_mb"`
 }
 type Rule struct {
 	ID        string `json:"id"`
@@ -76,6 +79,8 @@ type Rule struct {
 	Enabled   bool   `json:"enabled"`
 }
 type Event struct {
+	ProblemKey     string                  `json:"problem_key,omitempty"`
+	Tenant         string                  `json:"tenant,omitempty"`
 	Classification *CriticalClassification `json:"classification,omitempty"`
 	ParentID       string                  `json:"parent_id,omitempty"`
 	Diagnosis      *Diagnosis              `json:"diagnosis,omitempty"`
@@ -107,6 +112,13 @@ type Audit struct {
 	Action string    `json:"action"`
 }
 type State struct {
+	MailOutbox           []MailDelivery             `json:"mail_outbox,omitempty"`
+	MailDead             []MailDelivery             `json:"mail_dead,omitempty"`
+	MailDelivered        map[string]time.Time       `json:"mail_delivered,omitempty"`
+	IsolationSeen        map[string]string          `json:"isolation_seen,omitempty"`
+	ProblemGroups        map[string]ProblemGroup    `json:"problem_groups,omitempty"`
+	ProblemAutomatic     *bool                      `json:"problem_automatic,omitempty"`
+	MFA                  map[string]MFARecord       `json:"mfa,omitempty"`
 	DesktopGrants        map[string]DesktopGrant    `json:"desktop_grants,omitempty"`
 	NotificationReads    map[string]map[string]bool `json:"notification_reads,omitempty"`
 	AppUpdateRequested   time.Time                  `json:"app_update_requested,omitempty"`
@@ -142,6 +154,8 @@ type State struct {
 	BootstrapDigest      string                     `json:"bootstrap_digest,omitempty"`
 }
 type Session struct {
+	Created time.Time
+	MFATime time.Time
 	Subject string
 	Email   string
 	CSRF    string
@@ -159,54 +173,62 @@ type bucket struct {
 	Last  time.Time
 }
 type App struct {
-	desktopLogins     map[string]DesktopLogin
-	hostHealth        HostHealth
-	hostPrevious      HostCounters
-	notificationDirty bool
-	resourceHistoryMu sync.Mutex
-	n8nTestBusy       bool
-	n8nTestLast       time.Time
-	sshTerminals      map[string]*sshTerminal
-	networkTests      map[string]*NetworkTest
-	aiStatus          localAIStatus
-	aiCleanupRunning  bool
-	aiCleanupTarget   string
-	snmpMu            sync.Mutex
-	snmpDecoders      map[string]snmpDecoder
-	snmpSeen          map[string]time.Time
-	protocolSeen      map[string]time.Time
-	webhookQ          chan Event
-	webhookStatus     string
-	snmpStatus        string
-	backupMu          sync.Mutex
-	driveMu           sync.Mutex
-	analyzer          *localAnalyzer
-	mu                sync.Mutex
-	cfg               Config
-	state             State
-	events            []Event
-	sessions          map[string]Session
-	oauth             map[string]OAuth
-	counters          map[string]bucket
-	seen              map[string]time.Time
-	lastSeen          map[string]time.Time
-	devicePresence    map[string]bool
-	total             int64
-	totalDay          string
-	dropped           int64
-	storageError      string
-	mailStatus        string
-	feedSeen          time.Time
-	demo              bool
-	mailQ             chan Event
-	configPath        string
-	origin            string
-	rates             map[string]rateWindow
-	active            map[string]time.Time
-	bootAt            time.Time
-	bootstrapUsed     bool
-	nativeTLS         bool
-	localIPs          map[netip.Addr]bool
+	problemCounters       map[string]bucket
+	problemOriginCounters map[string]int
+	spoolInitialized      bool
+	spoolBytes            int64
+	spoolRecords          int
+	spoolOrigins          map[string]int
+	capacity              capacityLedger
+	mfaEnrollments        map[string]MFAEnrollment
+	desktopLogins         map[string]DesktopLogin
+	hostHealth            HostHealth
+	hostPrevious          HostCounters
+	notificationDirty     bool
+	resourceHistoryMu     sync.Mutex
+	n8nTestBusy           bool
+	n8nTestLast           time.Time
+	sshTerminals          map[string]*sshTerminal
+	networkTests          map[string]*NetworkTest
+	aiStatus              localAIStatus
+	aiCleanupRunning      bool
+	aiCleanupTarget       string
+	snmpMu                sync.Mutex
+	snmpDecoders          map[string]snmpDecoder
+	snmpSeen              map[string]time.Time
+	protocolSeen          map[string]time.Time
+	webhookQ              chan Event
+	webhookStatus         string
+	snmpStatus            string
+	backupMu              sync.Mutex
+	driveMu               sync.Mutex
+	analyzer              *localAnalyzer
+	mu                    sync.Mutex
+	cfg                   Config
+	state                 State
+	events                []Event
+	sessions              map[string]Session
+	oauth                 map[string]OAuth
+	counters              map[string]bucket
+	seen                  map[string]time.Time
+	lastSeen              map[string]time.Time
+	devicePresence        map[string]bool
+	total                 int64
+	totalDay              string
+	dropped               int64
+	storageError          string
+	mailStatus            string
+	feedSeen              time.Time
+	demo                  bool
+	mailQ                 chan Event
+	configPath            string
+	origin                string
+	rates                 map[string]rateWindow
+	active                map[string]time.Time
+	bootAt                time.Time
+	bootstrapUsed         bool
+	nativeTLS             bool
+	localIPs              map[netip.Addr]bool
 }
 
 var client = &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(r *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
@@ -483,7 +505,13 @@ func (a *App) audit(actor, action string) {
 }
 func (a *App) appendEvent(e Event) bool {
 	e = sanitizeEvent(e)
+	if e.Tenant == "" {
+		e.Tenant = a.tenantForSenderLocked(e.SenderIP)
+	}
 	e.Diagnosis = localDiagnosis(e)
+	if e.ProblemKey != "" {
+		return a.appendProblemLocked(e)
+	}
 	encoded, err := json.Marshal(e)
 	if err != nil {
 		a.storageError = "Falha de serialização"
@@ -499,7 +527,17 @@ func (a *App) appendEvent(e Event) bool {
 	if st, e := os.Stat(path); e == nil {
 		size = st.Size()
 	}
-	if size+int64(len(encoded)+1) > int64(limit)*1024*1024 {
+	if size+int64(len(encoded)+1) > int64(limit)*1024*1024 || !a.journalQuota(e, int64(len(encoded)+1)) {
+		if a.spoolEvent(e) {
+			a.remember(e)
+			a.notifyCriticalEvent(a.classifiedEvent(e))
+			a.queueWebhook(a.classifiedEvent(e))
+			a.queueN8N(a.classifiedEvent(e))
+			if e.Alert && e.Level >= a.cfg.MailMinLevel {
+				a.queueMailLocked(e)
+			}
+			return true
+		}
 		a.storageError = "Limite diário de logs atingido; aumente o limite ou investigue o volume"
 		a.dropped++
 		return false
@@ -518,9 +556,13 @@ func (a *App) appendEvent(e Event) bool {
 		log.Printf("journal: %v", err)
 		return false
 	}
+	a.capacity.Bytes[e.SenderIP] += int64(len(encoded) + 1)
 	a.storageError = ""
 	a.remember(e)
 	a.notifyCriticalEvent(a.classifiedEvent(e))
+	if e.Alert && e.Level >= a.cfg.MailMinLevel {
+		a.queueMailLocked(e)
+	}
 	a.queueWebhook(a.classifiedEvent(e))
 	a.queueN8N(a.classifiedEvent(e))
 	return true
@@ -621,7 +663,10 @@ func (a *App) ingest(d Device, raw string) {
 	now := time.Now().UTC()
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	ev := Event{ID: token(), Time: now, Device: d.Name, Kind: d.Kind, Protocol: "syslog", SenderIP: d.IP, SourceIP: sourceIP(raw, d.Kind), Message: redact(raw)}
+	ev := Event{Tenant: d.Client, ID: token(), Time: now, Device: d.Name, Kind: d.Kind, Protocol: "syslog", SenderIP: d.IP, SourceIP: sourceIP(raw, d.Kind), Message: redact(raw)}
+	if !a.ingestRateLocked(ev) {
+		return
+	}
 	title, level := "", 0
 	if cef, ok := parseCEF(raw); ok {
 		ev.CEF = &cef
@@ -635,6 +680,7 @@ func (a *App) ingest(d Device, raw string) {
 		ev.SourceIP = d.IP
 		title, level = snmpAlert(raw)
 	}
+	ev = a.trackProblemLocked(ev)
 	if !a.appendEvent(ev) {
 		return
 	}
@@ -868,6 +914,18 @@ func (a *App) maintenance() {
 				delete(a.oauth, k)
 			}
 		}
+		for k, b := range a.problemCounters {
+			if now.Sub(b.Last) > time.Minute {
+				delete(a.problemCounters, k)
+				prefix := strings.SplitN(k, ":", 2)[0]
+				for ip, count := range a.problemOriginCounters {
+					if secretDigest(ip)[:16] == prefix {
+						a.problemOriginCounters[ip] = max(0, count-1)
+						break
+					}
+				}
+			}
+		}
 		for k, b := range a.counters {
 			if len(b.Times) == 0 || now.Sub(b.Times[len(b.Times)-1]) > time.Hour {
 				delete(a.counters, k)
@@ -878,7 +936,10 @@ func (a *App) maintenance() {
 				delete(a.seen, k)
 			}
 		}
+		a.drainSpoolLocked()
 		entries, _ := filepath.Glob(filepath.Join(a.cfg.DataDir, "events-*.jsonl"))
+		problemEntries, _ := filepath.Glob(filepath.Join(a.cfg.DataDir, "problems", "events-*.jsonl"))
+		entries = append(entries, problemEntries...)
 		for _, p := range entries {
 			d, e := time.Parse("2006-01-02", strings.TrimSuffix(strings.TrimPrefix(filepath.Base(p), "events-"), ".jsonl"))
 			if e == nil && d.Before(now.UTC().Truncate(24*time.Hour).AddDate(0, 0, -a.cfg.RetentionDays+1)) {
@@ -886,28 +947,6 @@ func (a *App) maintenance() {
 					a.storageError = e.Error()
 				}
 			}
-		}
-		a.mu.Unlock()
-	}
-}
-func (a *App) mailWorker() {
-	for e := range a.mailQ {
-		a.mu.Lock()
-		to := a.cfg.MailTo
-		a.mu.Unlock()
-		status := "Gmail não configurado"
-		if secret("GMAIL_USER") != "" && secret("GMAIL_APP_PASSWORD") != "" && to != "" && !a.demo {
-			if err := sendMail(to, e); err != nil {
-				status = "Falha SMTP; verifique conectividade, política da conta e credenciais"
-			} else {
-				status = "Enviado em " + time.Now().Format(time.RFC3339)
-			}
-		}
-		a.mu.Lock()
-		a.mailStatus = status
-		a.audit("mailer", status)
-		if err := a.persist(); err != nil {
-			a.storageError = err.Error()
 		}
 		a.mu.Unlock()
 	}
@@ -995,6 +1034,9 @@ func (a *App) session(r *http.Request) (Session, bool) {
 	if !ok || !time.Now().Before(s.Expires) || a.roleLocked(s.Email) == "disabled" {
 		return Session{}, false
 	}
+	if a.mfaRequired() && s.Email != "bootstrap" && s.MFATime.IsZero() {
+		return Session{}, false
+	}
 	if last := a.active[value]; !last.IsZero() && time.Since(last) > 15*time.Minute {
 		delete(a.sessions, value)
 		delete(a.active, value)
@@ -1049,7 +1091,7 @@ func (a *App) newSession(w http.ResponseWriter, r *http.Request, email string, s
 		}
 		a.state.GoogleSubjects[strings.ToLower(email)] = subject
 	}
-	a.sessions[t] = Session{Subject: subject, Email: email, CSRF: token(), Expires: time.Now().Add(8 * time.Hour)}
+	a.sessions[t] = Session{Created: time.Now().UTC(), Subject: subject, Email: email, CSRF: token(), Expires: time.Now().Add(8 * time.Hour)}
 	a.active[t] = time.Now()
 	a.audit(email, "autenticação bem-sucedida")
 	if e := a.persist(); e != nil {
@@ -1061,6 +1103,10 @@ func (a *App) newSession(w http.ResponseWriter, r *http.Request, email string, s
 	}
 	a.mu.Unlock()
 	a.cookie(w, a.sessionName(), t, 0)
+	if a.mfaRequired() && email != "bootstrap" {
+		http.Redirect(w, r, "/auth/mfa", 303)
+		return
+	}
 	http.Redirect(w, r, "/", 303)
 }
 func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
@@ -1073,9 +1119,14 @@ func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
 		a.mu.Lock()
 		role := a.roleLocked(s.Email)
 		group := a.groupLocked(s.Email)
+		scope := a.scopeLocked(s.Email)
 
 		a.mu.Unlock()
-		if !groupAllows(group, r.Method, r.URL.Path) {
+		if !scope.Global && !tenantRouteSafe(r.Method, r.URL.Path) {
+			http.Error(w, "Operação global indisponível para conta com escopo de cliente", 403)
+			return
+		}
+		if !groupAllows(group, r.Method, r.URL.Path) && !a.capabilityAllows(s.Email, r.Method, r.URL.Path) {
 			http.Error(w, "Grupo sem permissão para esta operação", 403)
 			return
 		}
@@ -1088,6 +1139,14 @@ func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
 				http.Error(w, "CSRF inválido", 403)
 				return
 			}
+		}
+		if s.Email == "bootstrap" && r.URL.Path != "/api/account/local" && r.URL.Path != "/api/snapshot" {
+			http.Error(w, "Acesso inicial permite somente cadastrar a conta principal", 403)
+			return
+		}
+		if s.Email != "bootstrap" && a.mfaRequired() && sensitiveOperation(r.Method, r.URL.Path) && time.Since(s.MFATime) > 5*time.Minute {
+			http.Error(w, "Confirme um novo código do autenticador para esta operação", 428)
+			return
 		}
 		next(w, r)
 	}
@@ -1135,6 +1194,8 @@ func (a *App) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Login expirado", 403)
 		return
 	}
+	a.desktopLoginStage(flow.DesktopID, "google_callback")
+	defer a.desktopLoginCallbackFailed(flow.DesktopID)
 	resp, e := client.PostForm("https://oauth2.googleapis.com/token", url.Values{"code": {r.URL.Query().Get("code")}, "client_id": {a.googleSecret("GOOGLE_CLIENT_ID")}, "client_secret": {a.googleSecret("GOOGLE_CLIENT_SECRET")}, "redirect_uri": {a.origin + "/auth/callback"}, "grant_type": {"authorization_code"}, "code_verifier": {flow.Verifier}})
 	if e != nil {
 		http.Error(w, "Google indisponível", 502)
@@ -1208,6 +1269,8 @@ func (a *App) oauthCallback(w http.ResponseWriter, r *http.Request) {
 func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
 	a.registerAccountRoutes(mux)
+	a.registerProblemRoutes(mux)
+	a.registerIsolationRoutes(mux)
 	a.registerAlertRoutes(mux)
 	a.registerCriticalPatternRoutes(mux)
 	a.registerLocalAIRoutes(mux)
@@ -1220,12 +1283,14 @@ func (a *App) routes() http.Handler {
 	a.registerNetworkRoutes(mux)
 	a.registerDeviceNetworkRoutes(mux)
 	a.registerDeviceMetricRoutes(mux)
+	a.registerCollectorPackageRoute(mux)
 	a.registerResourceHistoryRoutes(mux)
 	a.registerHostHealthRoutes(mux)
 	a.registerSystemRoutes(mux)
 	a.registerUpdateRoutes(mux)
 	a.registerDesktopRoutes(mux)
 	a.registerDesktopLoginRoutes(mux)
+	a.registerMFARoutes(mux)
 	a.registerSSHRoutes(mux)
 	a.registerDHCPRoutes(mux)
 	a.registerTemporaryReportRoutes(mux)
@@ -1251,10 +1316,10 @@ func (a *App) routes() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(b)
 	})
-	for _, path := range []string{"desktop-link.js", "app-update.js", "collectors.js", "server-terminal.js", "assistant.js", "host-chart.js", "style.css", "favicon.svg", "alert-sounds.js", "critical-controls.js", "host-health.js", "device-network.js", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "n8n.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
+	for _, path := range []string{"mfa.js", "mfa.css", "problem-devices.js", "isolation-alerts.js", "native-audio.js", "desktop-link.js", "app-update.js", "collectors.js", "server-terminal.js", "assistant.js", "host-chart.js", "style.css", "favicon.svg", "alert-sounds.js", "critical-controls.js", "host-health.js", "device-network.js", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "n8n.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
 		p := path
 		mux.HandleFunc("GET /"+p, func(w http.ResponseWriter, r *http.Request) {
-			if p == "desktop-link.js" || p == "app-update.js" || p == "collectors.js" || p == "server-terminal.js" || p == "assistant.js" || p == "host-chart.js" || p == "host-health.js" || p == "critical-controls.js" || p == "n8n.js" || p == "alert-sounds.js" || p == "device-network.js" || p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" || p == "dashboard.js" || p == "reports.js" || p == "network.js" || p == "ssh.js" || p == "dhcp.js" || p == "test-reports.js" || p == "xterm.js" {
+			if strings.HasSuffix(p, ".js") {
 				w.Header().Set("Content-Type", "text/javascript")
 			} else if p == "favicon.svg" {
 				w.Header().Set("Content-Type", "image/svg+xml")
@@ -1281,6 +1346,13 @@ func (a *App) routes() http.Handler {
 		}
 		if a.demo {
 			a.newSession(w, r, "demo@multipla-siem.local")
+			return
+		}
+		a.mu.Lock()
+		configured := a.state.LocalAdmin.Hash != ""
+		a.mu.Unlock()
+		if configured && a.mfaRequired() {
+			http.Error(w, "Acesso inicial encerrado; use sua conta e MFA", 403)
 			return
 		}
 		if !equal(secret("BOOTSTRAP_TOKEN"), r.FormValue("token")) {
@@ -1341,12 +1413,23 @@ func (a *App) routes() http.Handler {
 		s, _ := a.session(r)
 		a.mu.Lock()
 		defer a.mu.Unlock()
+		if s.Email == "bootstrap" {
+			writeJSON(w, map[string]any{"version": productVersion(), "email": s.Email, "csrf": s.CSRF, "role": "admin", "group": groupSuperadmin, "local_account_ready": false, "config": map[string]any{"devices": []Device{}}, "events": []Event{}, "audit": []Audit{}})
+			return
+		}
+		if scope := a.scopeLocked(s.Email); !scope.Global {
+			a.scopedSnapshotLocked(w, s, scope)
+			return
+		}
 		q := strings.ToLower(r.URL.Query().Get("q"))
 		var evs []Event
 		alerts := 0
 		bins := make([]int, 30)
 		for i := len(a.events) - 1; i >= 0; i-- {
 			e := a.events[i]
+			if a.eventHiddenLocked(e) {
+				continue
+			}
 			if review, ok := a.state.AlertReviews[e.ID]; ok {
 				copy := review
 				e.Review = &copy
@@ -1449,7 +1532,11 @@ func (a *App) routes() http.Handler {
 		defer a.mu.Unlock()
 		if a.groupLocked(s.Email) != groupSuperadmin {
 			c.AllowedEmails = append([]string{}, a.cfg.AllowedEmails...)
+			c.RequireMFA = a.cfg.RequireMFA
 		}
+		c.SyslogTLS = a.cfg.SyslogTLS
+		c.SyslogClientCA = a.cfg.SyslogClientCA
+		c.RequireMFA = a.cfg.RequireMFA // Runtime APIs cannot disable the production second factor.
 		c.Listen = a.cfg.Listen
 		c.Syslog = a.cfg.Syslog
 		c.SNMP = a.cfg.SNMP
@@ -1462,6 +1549,20 @@ func (a *App) routes() http.Handler {
 			http.Error(w, "Demo permite apenas simulação", 400)
 			return
 		}
+		for _, email := range c.AllowedEmails {
+			known := false
+			for _, old := range a.cfg.AllowedEmails {
+				if strings.EqualFold(email, old) {
+					known = true
+				}
+			}
+			if !known {
+				if account, ok := a.state.Accounts[strings.ToLower(email)]; !ok || account.GlobalAccess == nil {
+					http.Error(w, "Cadastre a conta com escopo explícito na gestão de contas", 400)
+					return
+				}
+			}
+		}
 		if e := atomicJSON(a.configPath, c); e != nil {
 			http.Error(w, e.Error(), 500)
 			return
@@ -1472,7 +1573,7 @@ func (a *App) routes() http.Handler {
 		for _, previous := range a.cfg.Devices {
 			keep := false
 			for _, next := range c.Devices {
-				if next.IP == previous.IP && next.Name == previous.Name {
+				if next.IP == previous.IP && next.Name == previous.Name && next.Client == previous.Client {
 					keep = true
 				}
 			}
@@ -1636,7 +1737,7 @@ func (a *App) routes() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		streamEventExport(w, r, p)
+		streamEventExport(w, r, p, a.requestScope(r))
 	}))
 	mux.HandleFunc("POST /api/mail/test", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		select {
@@ -1749,7 +1850,8 @@ func (a *App) wazuh(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "limite de deduplicação; tente novamente", 429)
 		return
 	}
-	ev := Event{ID: token(), Time: time.Now().UTC(), Device: redact(v.Agent.Name), Kind: "wazuh", SourceIP: ip, Message: redact(v.FullLog), Level: v.Rule.Level, Rule: redact("Wazuh " + v.Rule.ID + ": " + v.Rule.Description), Alert: true}
+	sender := a.clientIP(r)
+	ev := Event{SenderIP: sender, Tenant: a.tenantForSenderLocked(sender), ID: token(), Time: time.Now().UTC(), Device: redact(v.Agent.Name), Kind: "wazuh", SourceIP: ip, Message: redact(v.FullLog), Level: v.Rule.Level, Rule: redact("Wazuh " + v.Rule.ID + ": " + v.Rule.Description), Alert: true}
 	if !a.appendEvent(ev) {
 		http.Error(w, "falha de armazenamento", 503)
 		return
@@ -1779,8 +1881,55 @@ func main() {
 	fullSchedule := flag.String("full-backup-schedule", "", "agendar backup completo diario para uma conta Drive")
 	fullLocked := flag.Bool("full-locked", false, "trava interna do backup completo")
 	enableUpdate := flag.Bool("enable-app-update", false, "instalar serviço restrito de atualização como root")
+	isolationCheck := flag.Bool("test-isolation-rules", false, "verificar nftables em namespace de teste")
+	isolationAgent := flag.Bool("isolation-agent", false, "agente root de isolamento direto")
+	enableDirectIsolation := flag.Bool("enable-isolation", false, "habilitar isolamento root com política de dispositivos atual")
+	sshSign := flag.Bool("ssh-sign", false, "assinador interno restrito de certificados SSH")
+	sshCATarget := flag.String("enable-ssh-ca", "", "habilitar CA SSH e autorizar um IP pelo root")
+	sshCASource := flag.String("ssh-source", "", "origens IP do SIEM para certificados SSH")
+	resetMFA := flag.String("mfa-reset", "", "recuperar MFA de conta pelo console root com serviço parado")
 	enableReboot := flag.Bool("enable-server-reboot", false, "instalar política restrita de reinício como root")
 	flag.Parse()
+	if *isolationCheck {
+		if err := testIsolationRules(); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("nftables: sintaxe e semântica verificadas em namespace isolado")
+		return
+	}
+	if *isolationAgent {
+		if err := runIsolationAgent(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *enableDirectIsolation {
+		if err := enableIsolation(*path); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("Isolamento direto habilitado. Logs encaminhados não acionam o agente.")
+		return
+	}
+	if *sshSign {
+		if err := runSSHSigner(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *sshCATarget != "" {
+		if err := enableSSHCA(*sshCATarget, *sshCASource); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("CA SSH configurada. Instale somente ssh-ca.pub no destino, usando o script de delegação.")
+		return
+	}
+	if *resetMFA != "" {
+		if err := recoverMFA(*path, *resetMFA); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("MFA removido e vínculos revogados. Reinicie o serviço e configure novo autenticador ao entrar.")
+		return
+	}
 	if *enableUpdate {
 		if err := enableAppUpdate(); err != nil {
 			log.Fatal(err)
@@ -1866,6 +2015,11 @@ func main() {
 	if e := validateConfig(c); e != nil {
 		log.Fatal(e)
 	}
+	if !*demo {
+		if err := checkMFAStorage(c); err != nil {
+			log.Fatal(err)
+		}
+	}
 	if *check {
 		if c.TLSCert != "" {
 			if _, e := tls.LoadX509KeyPair(c.TLSCert, c.TLSKey); e != nil {
@@ -1879,6 +2033,9 @@ func main() {
 	if e != nil {
 		log.Fatal(e)
 	}
+	if e = a.syslogTLS(); e != nil {
+		log.Fatal(e)
+	}
 	if e = a.syslog(); e != nil {
 		log.Fatal(e)
 	}
@@ -1887,6 +2044,7 @@ func main() {
 	go a.devicePresenceWorker()
 	go a.resourceHistoryWorker()
 	go a.hostHealthWorker()
+	go a.isolationWorker()
 	go a.backupScheduler()
 	go a.temporaryReportCleaner()
 	go a.mailWorker()

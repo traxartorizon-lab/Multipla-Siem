@@ -45,7 +45,7 @@ func TestSecurityLegacyExportRedactsCredentials(t *testing.T) {
 	ev := Event{ID: "old", Time: time.Now(), Message: "password=legacy-secret " + value, Rule: "Rule " + value}
 	b, _ := json.Marshal(ev)
 	os.WriteFile(a.journalPath(time.Now()), append(b, '\n'), 0600)
-	a.sessions["s"] = Session{"", "admin@gmail.com", "csrf", time.Now().Add(time.Hour)}
+	a.sessions["s"] = Session{Email: "admin@gmail.com", CSRF: "csrf", Expires: time.Now().Add(time.Hour)}
 	r := testRequest("GET", "/api/export?day="+time.Now().UTC().Format("2006-01-02"), nil)
 	r.AddCookie(&http.Cookie{Name: a.sessionName(), Value: "s"})
 	w := httptest.NewRecorder()
@@ -54,14 +54,14 @@ func TestSecurityLegacyExportRedactsCredentials(t *testing.T) {
 		t.Fatal("legacy export leaked credentials")
 	}
 }
-func TestSecurityLogQuotaFailClosed(t *testing.T) {
+func TestSecurityLogQuotaPreservesEvidenceInSpool(t *testing.T) {
 	a := testApp(t)
 	a.cfg.MaxDailyMB = 1
 	a.state.Rules = []Rule{{"test", "test", "any", "failed", 1, 60, 10, true, true}}
 	os.WriteFile(a.journalPath(time.Now()), []byte(strings.Repeat("x", 1024*1024)), 0600)
 	a.ingest(Device{Name: "PVE", IP: "192.168.1.2", Kind: "proxmox"}, "failed from 198.51.100.1")
-	if a.dropped != 1 || len(a.events) != 0 || len(a.state.Blocks) != 0 || a.storageError == "" {
-		t.Fatal("quota did not stop ingestion and response")
+	if a.dropped != 0 || len(a.events) < 2 || a.storageError == "" {
+		t.Fatal("quota failed to preserve evidence and detection in durable spool")
 	}
 }
 func TestSecurityBootstrapRotationPreservesGoogle(t *testing.T) {

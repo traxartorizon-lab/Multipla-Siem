@@ -338,27 +338,28 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 			http.Error(w, "informe seu usuário Linux para acessar o servidor SIEM", 400)
 			return
 		}
-		var method ssh.AuthMethod
-		if body.PrivateKey != "" {
-			var signer ssh.Signer
-			if body.Passphrase != "" {
-				signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(body.PrivateKey), []byte(body.Passphrase))
-			} else {
-				signer, err = ssh.ParsePrivateKey([]byte(body.PrivateKey))
-			}
-			if err != nil {
-				http.Error(w, "chave privada inválida ou frase-senha incorreta", 400)
-				return
-			}
-			method = ssh.PublicKeys(signer)
-		} else {
-			if body.Password == "" {
-				http.Error(w, "informe uma senha ou chave privada para esta sessão", 400)
-				return
-			}
-			method = ssh.Password(body.Password)
+		if body.PrivateKey != "" || body.Password != "" || body.Passphrase != "" {
+			http.Error(w, "Credenciais pessoais não são aceitas; configure o SSH delegado por certificado", 400)
+			return
 		}
-		current, _ := a.session(r)
+		a.mu.Lock()
+		pinned := a.state.SSHHostKeys[d.ID]
+		a.mu.Unlock()
+		if pinned.Key == "" {
+			http.Error(w, "verifique e confirme a identificação SSH antes de conectar", 409)
+			return
+		}
+		principal, _ := a.session(r)
+		method, err := delegatedSSHAuth(r.Context(), d, principal.Email)
+		if err != nil {
+			http.Error(w, err.Error(), 503)
+			return
+		}
+		current, validSession := a.session(r)
+		if !validSession || current.Email != principal.Email {
+			http.Error(w, "Sessão alterada durante a autorização SSH", 403)
+			return
+		}
 		a.mu.Lock()
 		identity := a.state.SSHHostKeys[d.ID]
 		port := d.SSHPort
@@ -391,7 +392,7 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 			http.Error(w, "limite de quatro terminais; encerre uma sessão", 429)
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		t := &sshTerminal{id: token(), owner: strings.ToLower(current.Email), equipment: d, status: "connecting", lastRead: time.Now(), cancel: cancel}
 		oldAudit := append([]Audit{}, a.state.Audit...)
 		a.audit(current.Email, "abertura de terminal SSH solicitada: "+d.Name+"; destino="+sshEquipmentAddress(d)+"; usuário="+d.SSHUser)

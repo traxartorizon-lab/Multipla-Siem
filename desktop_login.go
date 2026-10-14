@@ -11,9 +11,36 @@ import (
 )
 
 type DesktopLogin struct {
+	Stage, Error                                      string
 	Challenge, Email, Subject, AccountDigest, Consent string
 	Expires                                           time.Time
 	Approved                                          bool
+}
+
+func (a *App) desktopLoginStage(id, stage string) {
+	if id == "" {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	f, ok := a.desktopLogins[id]
+	if ok {
+		f.Stage = stage
+		a.desktopLogins[id] = f
+	}
+}
+func (a *App) desktopLoginCallbackFailed(id string) {
+	if id == "" {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	f, ok := a.desktopLogins[id]
+	if ok && f.Stage == "google_callback" && f.Email == "" {
+		f.Stage = "failed"
+		f.Error = "O retorno do Google não foi concluído. Confira a configuração OAuth e o erro exibido no navegador."
+		a.desktopLogins[id] = f
+	}
 }
 
 func pkceChallenge(verifier string) string {
@@ -51,11 +78,14 @@ func (a *App) desktopLoginConsent(w http.ResponseWriter, r *http.Request, id, em
 	flow.Subject = subject
 	flow.AccountDigest = a.desktopAccountDigest(flow.Email)
 	flow.Consent = token()
+	flow.Stage = "awaiting_consent"
 	a.desktopLogins[id] = flow
 	a.mu.Unlock()
 	a.cookie(w, "__Host-multipla_desktop_consent", flow.Consent, 300)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Referrer-Policy", "no-referrer")
+	// Form POSTs under no-referrer carry Origin: null in browsers. Keep
+	// same-origin metadata so approval can enforce its exact origin check.
+	w.Header().Set("Referrer-Policy", "same-origin")
 	fmt.Fprintf(w, `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Autorizar aplicativo Multipla SIEM</title><h1>Autorizar login no aplicativo Windows</h1><p>Conta: <strong>%s</strong></p><p>Confira se o aplicativo que você abriu mostra exatamente este código: <strong>%s</strong>.</p><p>Não confirme solicitações que você não iniciou. Esta autorização abre uma sessão com as permissões desta conta no aplicativo.</p><form method="post" action="/auth/desktop/approve"><input type="hidden" name="id" value="%s"><input type="hidden" name="consent" value="%s"><button>Confirmar login no meu aplicativo</button></form><p>Para cancelar, feche esta página. A solicitação expira em cinco minutos.</p></html>`, html.EscapeString(flow.Email), desktopLoginCode(id), html.EscapeString(id), html.EscapeString(flow.Consent))
 }
 func (a *App) registerDesktopLoginRoutes(mux *http.ServeMux) {
@@ -89,7 +119,7 @@ func (a *App) registerDesktopLoginRoutes(mux *http.ServeMux) {
 			return
 		}
 		id := token()
-		a.desktopLogins[id] = DesktopLogin{Challenge: input.Challenge, Expires: time.Now().Add(5 * time.Minute)}
+		a.desktopLogins[id] = DesktopLogin{Stage: "awaiting_browser", Challenge: input.Challenge, Expires: time.Now().Add(5 * time.Minute)}
 		writeJSON(w, map[string]string{"id": id, "code": desktopLoginCode(id), "url": a.origin + "/auth/desktop/google?id=" + id})
 	})
 	mux.HandleFunc("GET /auth/desktop/google", func(w http.ResponseWriter, r *http.Request) {
@@ -105,6 +135,7 @@ func (a *App) registerDesktopLoginRoutes(mux *http.ServeMux) {
 			http.Error(w, "Solicitação expirada", 403)
 			return
 		}
+		a.desktopLoginStage(id, "google_redirect")
 		a.oauthStart(w, r)
 	})
 	mux.HandleFunc("POST /auth/desktop/approve", func(w http.ResponseWriter, r *http.Request) {
@@ -127,6 +158,7 @@ func (a *App) registerDesktopLoginRoutes(mux *http.ServeMux) {
 			return
 		}
 		flow.Approved = true
+		flow.Stage = "approved"
 		flow.Consent = ""
 		a.desktopLogins[id] = flow
 		a.cookie(w, "__Host-multipla_desktop_consent", "", -1)
@@ -152,7 +184,7 @@ func (a *App) registerDesktopLoginRoutes(mux *http.ServeMux) {
 			http.Error(w, "Solicitação inválida ou expirada", 403)
 			return
 		}
-		writeJSON(w, map[string]any{"approved": flow.Approved, "email": flow.Email})
+		writeJSON(w, map[string]any{"approved": flow.Approved, "email": flow.Email, "stage": flow.Stage, "error": flow.Error})
 	})
 	mux.HandleFunc("POST /auth/desktop/consume", func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil {

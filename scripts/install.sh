@@ -2,7 +2,16 @@
 set -eu
 [ "$(id -u)" -eq 0 ] || { echo 'Execute com sudo.'; exit 1; }
 cd "$(dirname "$0")/.."
+# Initial trust is authenticated before any account, package or service mutation.
 case "$(uname -m)" in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; *) echo 'Arquitetura não suportada'; exit 1;; esac
+if [ "${MULTIPLA_DEVELOPER_BUILD:-0}" != 1 ]; then
+ command -v openssl >/dev/null && command -v sha256sum >/dev/null || { echo 'Requer OpenSSL e sha256sum para verificar o pacote antes da instalação.'; exit 1; }
+ [ "$(sha256sum release/trusted-release-public.pem | cut -d ' ' -f 1)" = 'ce744906a793bb377c33fdd791168a8ea2132ae378419b6caf7995866e7d7669' ] || { echo 'Raiz pública inválida'; exit 1; }
+ openssl pkeyutl -verify -pubin -inkey release/trusted-release-public.pem -rawin -in "release/bootstrap-manifest-$arch.json" -sigfile "release/bootstrap-manifest-$arch.sig"
+ expected=$(sed -n 's/.*"bootstrap-'"$arch"'.sha256":{"sha256":"\([0-9a-f]*\)".*/\1/p' "release/bootstrap-manifest-$arch.json")
+ [ "$expected" = "$(sha256sum "bootstrap-$arch.sha256" | cut -d ' ' -f 1)" ] || { echo 'Checksums não autenticados'; exit 1; }
+ sha256sum -c "bootstrap-$arch.sha256"
+fi
 binary="dist/multipla-siem-linux-$arch"
 if [ ! -f "$binary" ]; then
  command -v go >/dev/null || { echo 'Instale Go 1.24 ou posterior (https://go.dev/dl/) e execute novamente.'; exit 1; }
@@ -25,6 +34,7 @@ install -m 0755 "$binary" /usr/local/bin/multipla-siem
 # Reboot requires explicit root activation: multipla-siem -enable-server-reboot
 install -d -m 0755 /usr/local/lib/multipla-siem
 install -m 0755 "dist/multipla-update-linux-$arch" /usr/local/lib/multipla-siem/updater
+install -m 0755 scripts/multipla-update /usr/local/bin/multipla-update
 install -m 0755 scripts/multipla-update /usr/local/sbin/multipla-update
 if [ ! -f /var/lib/multipla-siem/config.json ]; then
  sed 's|"data_dir": "./data"|"data_dir": "/var/lib/multipla-siem"|' config.example.json >/var/lib/multipla-siem/config.json

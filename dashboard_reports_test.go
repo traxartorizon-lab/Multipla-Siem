@@ -28,12 +28,12 @@ func TestSecurityReportOriginsIncludePIDPrefixedFirewallAndIPv6(t *testing.T) {
 	}
 	f := reportFilter{Kind: "infrastructure", Severity: "critical"}
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	report, err := a.buildReport(httptest.NewRequest("GET", "/", nil), f, day, day)
+	report, err := a.buildReport(scopedTestRequest(a,httptest.NewRequest("GET", "/", nil)), f, day, day)
 	if err != nil || report.Matched != 4 || report.CriticalWithoutIP != 1 || report.CriticalBySourceIP["203.0.113.12"] != 1 {
 		t.Fatal("security aggregation failed", report, err)
 	}
 	f.SourceIP = "2001:db8::5"
-	report, err = a.buildReport(httptest.NewRequest("GET", "/", nil), f, day, day)
+	report, err = a.buildReport(scopedTestRequest(a,httptest.NewRequest("GET", "/", nil)), f, day, day)
 	if err != nil || report.Matched != 1 {
 		t.Fatal("origin filter failed", report, err)
 	}

@@ -14,6 +14,9 @@ import (
 	"time"
 )
 
+//go:embed scripts/multipla-update
+var appUpdaterEntry string
+
 //go:embed deploy/multipla-app-update.service
 var appUpdateUnit string
 
@@ -25,6 +28,9 @@ var appUpdateGate sync.Mutex
 func enableAppUpdate() error {
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
 		return errors.New("execute como root no servidor Linux")
+	}
+	if err := os.WriteFile("/usr/local/bin/multipla-update", []byte(appUpdaterEntry), 0755); err != nil {
+		return err
 	}
 	for path, content := range map[string]string{
 		"/etc/systemd/system/multipla-app-update.service":    appUpdateUnit,
@@ -90,11 +96,12 @@ func (a *App) registerUpdateRoutes(mux *http.ServeMux) {
 		if !decode(w, r, &input) {
 			return
 		}
-		if input.Confirm != "ATUALIZAR" || len(input.Password) < 14 || len(input.Password) > 256 {
+		s, _ := a.session(r)
+		googleMFA := a.mfaRequired() && s.Subject != "" && !s.MFATime.IsZero() && time.Since(s.MFATime) <= 5*time.Minute
+		if input.Confirm != "ATUALIZAR" || (!googleMFA && (len(input.Password) < 14 || len(input.Password) > 256)) {
 			http.Error(w, "Confirme ATUALIZAR e informe sua senha", 400)
 			return
 		}
-		s, _ := a.session(r)
 		if !a.takeRate("step-up-update:"+strings.ToLower(s.Email), 5, time.Minute) {
 			http.Error(w, "Limite de reautenticação; aguarde um minuto", 429)
 			return
@@ -107,9 +114,13 @@ func (a *App) registerUpdateRoutes(mux *http.ServeMux) {
 			salt, stored = a.state.LocalAdmin.Salt, a.state.LocalAdmin.Hash
 		}
 		a.mu.Unlock()
-		hash, err := passwordHash(input.Password, salt)
+		hash := ""
+		var err error
+		if !googleMFA {
+			hash, err = passwordHash(input.Password, salt)
+		}
 		input.Password = ""
-		if err != nil || stored == "" || !equal(hash, stored) {
+		if !googleMFA && (err != nil || stored == "" || !equal(hash, stored)) {
 			http.Error(w, "Reautenticação recusada; conta deve ter credencial local para esta operação", 403)
 			return
 		}

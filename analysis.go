@@ -122,14 +122,18 @@ func (l *localAnalyzer) observe(e Event) []Event {
 		alert.ParentID = e.ID
 		alerts = append(alerts, alert)
 	}
-	m := l.Devices[e.Device]
+	deviceKey := e.Device
+	if e.Tenant != "" {
+		deviceKey = e.Tenant + "\x00" + e.SenderIP + "\x00" + e.Device
+	}
+	m := l.Devices[deviceKey]
 	if m == nil {
 		if len(l.Devices) >= analysisDeviceLimit {
 			l.Dropped++
 			return alerts
 		}
 		m = &analysisMinute{}
-		l.Devices[e.Device] = m
+		l.Devices[deviceKey] = m
 	}
 	m.advance(e.Time)
 	m.LastSeen = e.Time
@@ -140,7 +144,7 @@ func (l *localAnalyzer) observe(e Event) []Event {
 		m.Last[slot] = e.Time
 		alerts = append(alerts, analysisAlert(e, name, reason, detector, level))
 	}
-	key := e.Device + "|" + e.SourceIP
+	key := e.Tenant + "|" + e.Device + "|" + e.SourceIP
 	if e.SourceIP != "" {
 		b := l.Attempts[key]
 		if !b.First.IsZero() && e.Time.Sub(b.First) > 5*time.Minute {

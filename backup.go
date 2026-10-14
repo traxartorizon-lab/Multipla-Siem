@@ -194,10 +194,21 @@ func (a *App) restoreBackup(email string, data []byte) error {
 	b.Preferences.BackupDrive = false
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	c := a.cfg
 	bc := b.Config
+	if email != "bootstrap" {
+		present := false
+		for _, allowed := range bc.AllowedEmails {
+			if strings.EqualFold(allowed, email) {
+				present = true
+			}
+		}
+		if !present {
+			return errors.New("backup removeria a autorização da conta atual")
+		}
+	}
+	c := a.cfg
 	c.RetentionDays = bc.RetentionDays
-	c.AllowedEmails = bc.AllowedEmails
+	c.AllowedEmails = append([]string{}, a.cfg.AllowedEmails...) // Configuration backups never enroll identities or grant legacy global access.
 	c.Devices = bc.Devices
 	c.Protected = bc.Protected
 	c.BlockMinutes = bc.BlockMinutes
@@ -520,7 +531,7 @@ func (a *App) runScheduledBackups(now time.Time) {
 				allowed = true
 			}
 		}
-		if !allowed {
+		if !allowed || !a.backupPrivilegeLocked(email) {
 			continue
 		}
 		loc, e := time.LoadLocation(p.BackupTimezone)

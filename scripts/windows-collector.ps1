@@ -8,6 +8,23 @@ $collectorInteractiveInstall=$Install -and (-not $Server -or -not $DeviceIP)
 
 if($Uninstall){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue;Write-Output 'Coletor desativado. Revogue a chave no SIEM; remova a pasta protegida se não for reutilizar.';exit}
 if($Install){
+ # Verify signed artifact hashes before modifying tasks or protected folders.
+ $trust=Join-Path $PSScriptRoot 'trusted-release-public.pem'
+ if(-not (Test-Path -LiteralPath $trust) -or (Get-FileHash -LiteralPath $trust -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'ce744906a793bb377c33fdd791168a8ea2132ae378419b6caf7995866e7d7669'){throw 'Baixe e extraia o pacote assinado completo do coletor.'}
+ $openssl=(Get-Command openssl -ErrorAction SilentlyContinue).Source
+ if(-not $openssl){$candidate=Join-Path $env:ProgramFiles 'Git/usr/bin/openssl.exe';if(Test-Path -LiteralPath $candidate){$openssl=$candidate}}
+ if(-not $openssl){throw 'OpenSSL não encontrado. Verifique o pacote com a ferramenta oficial antes de instalar; não ignore a assinatura.'}
+ & $openssl pkeyutl -verify -pubin -inkey $trust -rawin -in (Join-Path $PSScriptRoot 'collectors-manifest.json') -sigfile (Join-Path $PSScriptRoot 'collectors-manifest.sig')
+ if($LASTEXITCODE -ne 0){throw 'Assinatura do coletor inválida.'}
+ $signed=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'collectors-manifest.json') -Raw | ConvertFrom-Json
+ if($signed.product -ne 'Multipla SIEM' -or $signed.schema -ne 1){throw 'Manifesto de outro produto.'}
+ foreach($entry in $signed.files.PSObject.Properties){
+  if($entry.Name -match '[\\/]' -or $entry.Name -eq '..'){throw 'Caminho inválido.'}
+  $file=Join-Path $PSScriptRoot $entry.Name
+  if((Get-Item -LiteralPath $file).Length -ne $entry.Value.size -or (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -ne $entry.Value.sha256){throw 'Integridade do coletor inválida.'}
+ }
+}
+if($Install){
  try{
  if(-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
   if($collectorBackground){throw 'A instalacao requer administrador'}

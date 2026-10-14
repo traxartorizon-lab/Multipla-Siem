@@ -32,3 +32,8 @@ with tempfile.TemporaryDirectory() as directory:
         assert updater.stat().st_size == manifest['updater_size']
         assert hashlib.sha256(updater.read_bytes()).hexdigest() == manifest['updater_sha256']
 print('Signatures and reproducible release binaries verified.')
+
+# Collector source and signed installer payload must also match the checkout.
+subprocess.run(['python3','scripts/verify-package.py','--key','release/trusted-release-public.pem','--manifest','release/collectors/collectors-manifest.json','--signature','release/collectors/collectors-manifest.sig','--root','release/collectors','--version',version],check=True)
+for arch in ('amd64','arm64'):
+ subprocess.run(['python3','scripts/verify-package.py','--key','release/trusted-release-public.pem','--manifest',f'release/bootstrap-manifest-{arch}.json','--signature',f'release/bootstrap-manifest-{arch}.sig','--root','.','--version',version],check=True)

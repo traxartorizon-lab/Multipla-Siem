@@ -24,7 +24,7 @@ func TestHistoryClientFilterBeforePagination(t *testing.T) {
 	}
 	for _, tc := range []struct{ client, id string }{{"Alpha", "alpha"}, {"~unassigned", "unassigned"}, {"missing", ""}} {
 		q := url.Values{"client": {tc.client}, "q": {"192.0.2.50"}}
-		events, more, partial, err := a.historyEvents(httptest.NewRequest("GET", "/?"+q.Encode(), nil), 0, "")
+		events, more, partial, err := a.historyEvents(scopedTestRequest(a,httptest.NewRequest("GET", "/?"+q.Encode(), nil)), 0, "")
 		if err != nil || more || partial {
 			t.Fatal(err, more, partial)
 		}
@@ -60,7 +60,7 @@ func TestCriticalClientHistoryFiltersBeforePagination(t *testing.T) {
 		e.Time = time.Now().Add(-time.Minute)
 		a.appendEvent(e)
 	}
-	events, more, partial, err := a.historyEvents(httptest.NewRequest("GET", "/api/events/history?critical=1&client=Alpha", nil), 0, "")
+	events, more, partial, err := a.historyEvents(scopedTestRequest(a,httptest.NewRequest("GET", "/api/events/history?critical=1&client=Alpha", nil)), 0, "")
 	if err != nil || more || partial || len(events) != 1 || events[0].ID != "critical-alpha" {
 		t.Fatal(events, more, partial, err)
 	}

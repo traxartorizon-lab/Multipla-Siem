@@ -12,8 +12,15 @@
     <WarningsAsErrors>NU1900;NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>Multipla.Siem</AssemblyName>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <Version>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/../VERSION').Trim())</Version>
+    <Deterministic>true</Deterministic>
+    <DebugType>none</DebugType>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <PathMap>$(MSBuildProjectDirectory)=/_/MultiplaSIEM/desktop</PathMap>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="app.ico" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
   </ItemGroup>

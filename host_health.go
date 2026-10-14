@@ -10,14 +10,17 @@ import (
 )
 
 type SystemNotification struct {
-	Read     bool        `json:"read"`
-	Focus    *EventFocus `json:"focus,omitempty"`
-	ID       string      `json:"id"`
-	Time     time.Time   `json:"time"`
-	Title    string      `json:"title"`
-	Detail   string      `json:"detail"`
-	Severity string      `json:"severity"`
-	EventID  string      `json:"event_id,omitempty"`
+	Continuous  bool        `json:"continuous,omitempty"`
+	IsolationIP string      `json:"isolation_ip,omitempty"`
+	Tenant      string      `json:"tenant,omitempty"`
+	Read        bool        `json:"read"`
+	Focus       *EventFocus `json:"focus,omitempty"`
+	ID          string      `json:"id"`
+	Time        time.Time   `json:"time"`
+	Title       string      `json:"title"`
+	Detail      string      `json:"detail"`
+	Severity    string      `json:"severity"`
+	EventID     string      `json:"event_id,omitempty"`
 }
 type HostThread struct {
 	PID      int     `json:"pid"`
@@ -69,7 +72,12 @@ func (a *App) notifyCriticalEvent(e Event) {
 		title = "Evento crítico"
 	}
 	focus := focusForEvent(e)
-	a.addNotification(SystemNotification{Focus: &focus, ID: "event-" + e.ID, Time: time.Now().UTC(), Title: title, Detail: e.Device + " · " + e.SourceIP, Severity: "critical", EventID: e.ID})
+	a.addNotification(SystemNotification{Continuous: e.Detector == "direct-siem-isolation", IsolationIP: func() string {
+		if e.Detector == "direct-siem-isolation" {
+			return e.SourceIP
+		}
+		return ""
+	}(), Tenant: e.Tenant, Focus: &focus, ID: "event-" + e.ID, Time: time.Now().UTC(), Title: title, Detail: e.Device + " · " + e.SourceIP, Severity: "critical", EventID: e.ID})
 }
 func (a *App) updateHostConditions(health HostHealth) {
 	if a.state.HostConditions == nil {
@@ -193,6 +201,14 @@ func (a *App) registerHostHealthRoutes(mux *http.ServeMux) {
 		defer a.mu.Unlock()
 		cleared := a.state.NotificationsCleared[strings.ToLower(session.Email)]
 		all, _ := notificationView(a.state.Notifications, cleared)
+		scope := a.scopeLocked(session.Email)
+		visible := []SystemNotification{}
+		for _, n := range all {
+			if scope.notification(n) {
+				visible = append(visible, n)
+			}
+		}
+		all = visible
 		unread := 0
 		for i := range all {
 			all[i].Read = !all[i].Time.After(cleared) || a.state.NotificationReads[strings.ToLower(session.Email)][all[i].ID]
@@ -226,6 +242,27 @@ func (a *App) registerHostHealthRoutes(mux *http.ServeMux) {
 				http.Error(w, "Limite de contas", 400)
 				return
 			}
+		}
+		scope := a.scopeLocked(email)
+		if !scope.Global {
+			if a.state.NotificationReads == nil {
+				a.state.NotificationReads = map[string]map[string]bool{}
+			}
+			oldReads := a.state.NotificationReads[email]
+			next := map[string]bool{}
+			for _, n := range a.state.Notifications {
+				if oldReads[n.ID] || (scope.notification(n) && !n.Time.After(body.Through)) {
+					next[n.ID] = true
+				}
+			}
+			a.state.NotificationReads[email] = next
+			if err := a.persist(); err != nil {
+				a.state.NotificationReads[email] = oldReads
+				http.Error(w, "Falha ao salvar leitura", 503)
+				return
+			}
+			writeJSON(w, map[string]bool{"ok": true})
+			return
 		}
 		old := a.state.NotificationsCleared[email]
 		if body.Through.Before(old) {

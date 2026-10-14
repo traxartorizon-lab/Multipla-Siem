@@ -58,6 +58,16 @@ func TestDesktopGrantIsRestrictedRevocableAndBoundToAccount(t *testing.T) {
 	if !a.state.NotificationReads["admin@gmail.com"]["alert-1"] {
 		t.Fatal("read not persisted")
 	}
+	a.state.Notifications = append(a.state.Notifications, SystemNotification{ID: "alert-2", Time: time.Now()}, SystemNotification{ID: "new-alert", Time: time.Now()})
+	r := httptest.NewRequest("POST", "/api/desktop/notifications/read-all", strings.NewReader(`{"ids":["alert-1","alert-2"]}`))
+	r.TLS = &tls.ConnectionState{}
+	r.Header.Set("Authorization", "Bearer "+created.Key)
+	r.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	a.routes().ServeHTTP(w, r)
+	if w.Code != 200 || !a.state.NotificationReads["admin@gmail.com"]["alert-2"] || a.state.NotificationReads["admin@gmail.com"]["new-alert"] || a.state.NotificationReads["other@example.com"]["alert-2"] {
+		t.Fatal("batch read changed other account or unseen notification", w.Code, w.Body.String())
+	}
 	a.state.Accounts = map[string]AccessAccount{"admin@gmail.com": {Group: groupAlerts, Role: "viewer"}}
 	if w := call("GET", "/api/desktop/notifications", "Bearer "+created.Key, true); w.Code != 401 {
 		t.Fatal("changed group retained old grant")

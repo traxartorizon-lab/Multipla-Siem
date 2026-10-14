@@ -26,8 +26,13 @@ func TestSSHSessionRequiresDurableStartAudit(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.state.SSHHostKeys = map[string]SSHHostIdentity{localServerSSHID: {IP: "127.0.0.1", Port: 22, Key: base64.StdEncoding.EncodeToString(key.Marshal())}}
+	oldDelegated := delegatedSSHAuth
+	defer func() { delegatedSSHAuth = oldDelegated }()
+	delegatedSSHAuth = func(context.Context, NetworkEquipment, string) (ssh.AuthMethod, error) {
+		return ssh.Password("test-only-never-sent"), nil
+	}
 	a.cfg.DataDir = filepath.Join(t.TempDir(), "missing", "directory")
-	body := fmt.Sprintf(`{"id":%q,"user":"audituser","password":"audit-secret-never-log"}`, localServerSSHID)
+	body := fmt.Sprintf(`{"id":%q,"user":"multipla-ops"}`, localServerSSHID)
 	w := httptest.NewRecorder()
 	a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "POST", "/api/ssh/sessions", []byte(body)))
 	if w.Code != 503 || len(a.sshTerminals) != 0 {

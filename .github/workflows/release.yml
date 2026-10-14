@@ -5,7 +5,7 @@ on:
     paths: ['release/**']
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 concurrency:
   group: signed-release
   cancel-in-progress: false
@@ -28,7 +28,7 @@ jobs:
           CGO_ENABLED: '0'
           GOTELEMETRY: 'off'
         run: |
-          for file in app dashboard device-network critical-controls host-health alert-sounds backup n8n assistant host-chart ssh collectors server-terminal accounts app-update desktop-link; do node --check "web/$file.js"; done
+          for file in app dashboard device-network critical-controls host-health alert-sounds backup n8n assistant host-chart ssh collectors server-terminal accounts app-update desktop-link mfa native-audio isolation-alerts problem-devices; do node --check "web/$file.js"; done
           node scripts/test-app-update-policy.cjs
           node scripts/test-critical-client-focus.cjs
           node scripts/test-n8n-workflow.cjs
@@ -46,15 +46,22 @@ jobs:
           done
       - name: Verify signatures and exact binary hashes
         run: python3 .github/verify-release.py
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check nftables inside an isolated network namespace
         run: |
-          version=$(python3 -c "import json; print(json.load(open('release/manifest-amd64.json'))['version'])")
-          gh release create "v$version" --target "$GITHUB_SHA" --title "Multipla Siem $version" --notes-file RELEASE-NOTES.md --latest dist/multipla-siem-linux-amd64 dist/multipla-siem-linux-arm64 dist/multipla-update-linux-amd64 dist/multipla-update-linux-arm64 release/manifest-amd64.json release/manifest-amd64.sig release/manifest-arm64.json release/manifest-arm64.sig
+          sudo apt-get update -qq
+          sudo apt-get install -y nftables
+          sudo unshare --net dist/multipla-siem-linux-amd64 -test-isolation-rules
+      - name: Collect verified Linux binaries
+        run: |
+          mkdir -p linux-package
+          cp dist/multipla-siem-linux-* dist/multipla-update-linux-* linux-package/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: verified-linux
+          path: linux-package/
+          retention-days: 3
 
   windows-package:
-    needs: release
     runs-on: windows-2025
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
@@ -85,14 +92,55 @@ jobs:
           if ($process.ExitCode -ne 0 -or !(Test-Path app-package/self-test-result.txt)) { throw 'Self-test failed' }
           Get-Content app-package/self-test-result.txt
 
-      - name: Publish Windows portable app
+      - name: Verify and package Windows portable app
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $version = (Get-Content VERSION -Raw).Trim()
           Copy-Item WINDOWS-APP.md app-package/LEIA-ME.md
           Copy-Item desktop/packages.lock.json app-package/dependencies.lock.json
-          Compress-Archive -Path app-package/* -DestinationPath Multipla-SIEM-Windows-x64.zip
-          gh release upload "v$version" Multipla-SIEM-Windows-x64.zip --clobber
-          if ($LASTEXITCODE -ne 0) { throw "Windows upload failed" }
+          Remove-Item app-package/self-test-result.txt
+          python .github/verify-windows.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows signature or reproducibility failed' }
+          Copy-Item release/windows-manifest.json app-package/
+          Copy-Item release/windows-manifest.sig app-package/
+          Copy-Item release/trusted-release-public.pem app-package/
+          Copy-Item scripts/verify-package.py app-package/
+          Compress-Archive -Path app-package/* -DestinationPath "Multipla-SIEM-Windows-$version-x64.zip"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: verified-windows
+          path: Multipla-SIEM-Windows-*-x64.zip
+          retention-days: 3
+
+
+  publish:
+    needs: [release, windows-package]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: verified-linux
+          path: published/
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: verified-windows
+          path: published/
+      - name: Assemble source-independent collector bundle and security metadata
+        run: |
+          python3 .github/package-release.py
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-path: published/*
+      - name: Publish only after both platforms pass
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(cat VERSION)
+          gh release create "v$version" --target "$GITHUB_SHA" --title "Multipla Siem $version" --notes-file RELEASE-NOTES.md --latest published/*

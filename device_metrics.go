@@ -31,6 +31,7 @@ type DeviceDiskMetric struct {
 	UsedPercent float64 `json:"used_percent"`
 }
 type DeviceTelemetry struct {
+	Tenant       string             `json:"tenant,omitempty"`
 	Hostname     string             `json:"hostname"`
 	CPU          float64            `json:"cpu"`
 	Memory       float64            `json:"memory"`
@@ -91,6 +92,11 @@ func (a *App) registerDeviceMetricRoutes(mux *http.ServeMux) {
 		}
 		d, ok := a.registeredDevice(body.IP)
 		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		scope := a.requestScope(r)
+		if !scope.Global && !scope.Clients[d.Client] {
 			http.NotFound(w, r)
 			return
 		}
@@ -160,6 +166,7 @@ func (a *App) registerDeviceMetricRoutes(mux *http.ServeMux) {
 			http.Error(w, err.Error(), 400)
 			return
 		}
+		data.Tenant = d.Client
 		data.Received = time.Now().UTC()
 		a.mu.Lock()
 		defer a.mu.Unlock()
@@ -188,11 +195,15 @@ func (a *App) registerDeviceMetricRoutes(mux *http.ServeMux) {
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("GET /api/devices/metrics", a.auth(func(w http.ResponseWriter, r *http.Request) {
+		scope := a.requestScope(r)
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		visible := map[string]DeviceTelemetry{}
 		for _, d := range a.cfg.Devices {
-			if m, ok := a.state.DeviceMetrics[d.IP]; ok {
+			if !scope.Global && !scope.Clients[d.Client] {
+				continue
+			}
+			if m, ok := a.state.DeviceMetrics[d.IP]; ok && (scope.Global || scope.Clients[m.Tenant] && m.Tenant == d.Client) {
 				visible[d.IP] = m
 			}
 		}

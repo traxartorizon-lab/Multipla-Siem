@@ -7,11 +7,14 @@ import (
 )
 
 type AccessAccount struct {
-	Group    string `json:"group,omitempty"`
-	Role     string `json:"role"`
-	Salt     string `json:"salt,omitempty"`
-	Hash     string `json:"password_hash,omitempty"`
-	Disabled bool   `json:"disabled"`
+	Clients      []string `json:"clients,omitempty"`
+	GlobalAccess *bool    `json:"global_access,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
+	Group        string   `json:"group,omitempty"`
+	Role         string   `json:"role"`
+	Salt         string   `json:"salt,omitempty"`
+	Hash         string   `json:"password_hash,omitempty"`
+	Disabled     bool     `json:"disabled"`
 }
 
 func (a *App) roleLocked(email string) string {
@@ -43,17 +46,20 @@ func (a *App) registerAccountRoutes(mux *http.ServeMux) {
 		rows := []map[string]any{}
 		for _, email := range a.cfg.AllowedEmails {
 			account := a.state.Accounts[strings.ToLower(email)]
-			rows = append(rows, map[string]any{"email": email, "role": a.roleLocked(email), "group": a.groupLocked(email), "disabled": account.Disabled, "local_login": account.Hash != "" || strings.EqualFold(email, a.state.LocalAdmin.Email), "primary": strings.EqualFold(email, a.state.LocalAdmin.Email)})
+			rows = append(rows, map[string]any{"clients": account.Clients, "global_access": a.scopeLocked(email).Global, "capabilities": account.Capabilities, "email": email, "role": a.roleLocked(email), "group": a.groupLocked(email), "disabled": account.Disabled, "local_login": account.Hash != "" || strings.EqualFold(email, a.state.LocalAdmin.Email), "primary": strings.EqualFold(email, a.state.LocalAdmin.Email)})
 		}
 		writeJSON(w, map[string]any{"accounts": rows})
 	}))
 	mux.HandleFunc("PUT /api/accounts", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
-			Email    string `json:"email"`
-			Group    string `json:"group"`
-			Role     string `json:"role"`
-			Password string `json:"password"`
-			Disabled bool   `json:"disabled"`
+			Clients      []string `json:"clients"`
+			GlobalAccess *bool    `json:"global_access"`
+			Capabilities []string `json:"capabilities"`
+			Email        string   `json:"email"`
+			Group        string   `json:"group"`
+			Role         string   `json:"role"`
+			Password     string   `json:"password"`
+			Disabled     bool     `json:"disabled"`
 		}
 		if !decode(w, r, &input) {
 			return
@@ -86,6 +92,10 @@ func (a *App) registerAccountRoutes(mux *http.ServeMux) {
 		s, _ := a.session(r)
 		a.mu.Lock()
 		defer a.mu.Unlock()
+		if a.groupLocked(s.Email) != groupSuperadmin && (input.Group == groupSuperadmin || len(input.Capabilities) > 0) {
+			http.Error(w, "Somente Superadmin concede privilégios adicionais", 403)
+			return
+		}
 		if strings.EqualFold(input.Email, a.state.LocalAdmin.Email) {
 			http.Error(w, "A conta administrativa principal permanece protegida", 400)
 			return
@@ -95,10 +105,45 @@ func (a *App) registerAccountRoutes(mux *http.ServeMux) {
 			accounts[k] = v
 		}
 		previous := accounts[input.Email]
+		if a.groupLocked(s.Email) != groupSuperadmin && a.groupLocked(input.Email) == groupSuperadmin {
+			http.Error(w, "Somente Superadmin altera outra conta Superadmin", 403)
+			return
+		}
+		if input.GlobalAccess == nil {
+			input.GlobalAccess = previous.GlobalAccess
+			if input.GlobalAccess == nil {
+				v := false
+				input.GlobalAccess = &v
+			}
+		}
+		if len(input.Capabilities) > 3 {
+			http.Error(w, "Limite de permissões", 400)
+			return
+		}
+		if len(input.Clients) > 100 {
+			http.Error(w, "Limite de clientes", 400)
+			return
+		}
+		known := map[string]bool{}
+		for _, d := range a.cfg.Devices {
+			known[d.Client] = true
+		}
+		for _, c := range input.Clients {
+			if c == "" || !known[c] {
+				http.Error(w, "Cliente desconhecido", 400)
+				return
+			}
+		}
+		for _, cap := range input.Capabilities {
+			if cap != "accounts" && cap != "backup" && cap != "terminal" {
+				http.Error(w, "Permissão desconhecida", 400)
+				return
+			}
+		}
 		if input.Password == "" {
 			salt, hash = previous.Salt, previous.Hash
 		}
-		accounts[input.Email] = AccessAccount{Group: input.Group, Role: input.Role, Salt: salt, Hash: hash, Disabled: input.Disabled}
+		accounts[input.Email] = AccessAccount{Clients: input.Clients, GlobalAccess: input.GlobalAccess, Capabilities: input.Capabilities, Group: input.Group, Role: input.Role, Salt: salt, Hash: hash, Disabled: input.Disabled}
 		if len(accounts) > 100 {
 			http.Error(w, "Limite de contas atingido", 400)
 			return

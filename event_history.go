@@ -47,6 +47,7 @@ func (a *App) readHistoryEvents(r *http.Request, offset int, matchID string, cri
 	a.mu.Lock()
 	alertsOnly := a.groupLocked(session.Email) == groupAlerts
 	a.mu.Unlock()
+	scope := a.requestScope(r)
 	now := time.Now().UTC()
 	cut, end, rangeErr := historyTimeRange(r, now)
 	if rangeErr != nil {
@@ -90,6 +91,9 @@ func (a *App) readHistoryEvents(r *http.Request, offset int, matchID string, cri
 	}
 	for day := end; !day.Before(cut.Truncate(24 * time.Hour)); day = day.AddDate(0, 0, -1) {
 		path := a.journalPath(day)
+		if r.URL.Path == "/api/problem-devices/events" {
+			path = a.problemJournalPath(day)
+		}
 		err := regularFile(path)
 		if os.IsNotExist(err) {
 			continue
@@ -142,6 +146,18 @@ func (a *App) readHistoryEvents(r *http.Request, offset int, matchID string, cri
 			for i := len(lines) - 1; i >= first; i-- {
 				var event Event
 				if json.Unmarshal(lines[i], &event) != nil || event.Time.Before(cut) || event.Time.After(end) {
+					continue
+				}
+				a.mu.Lock()
+				hidden := a.eventHiddenLocked(event)
+				a.mu.Unlock()
+				if hidden && r.URL.Path != "/api/problem-devices/events" && matchID == "" && r.URL.Query().Get("include_hidden") != "1" {
+					continue
+				}
+				if group := r.URL.Query().Get("group"); r.URL.Path == "/api/problem-devices/events" && group != "" && event.ProblemKey != group {
+					continue
+				}
+				if !scope.event(event) {
 					continue
 				}
 				if matchID != "" {

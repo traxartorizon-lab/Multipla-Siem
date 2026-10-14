@@ -67,7 +67,7 @@ func TestDashboardDistributionCutoffAndOriginalLogs(t *testing.T) {
 		json.NewEncoder(f).Encode(e)
 		f.Close()
 	}
-	report, err := a.buildReport(httptest.NewRequest("GET", "/", nil), reportFilter{Type: "logs", cutoff: now.Add(-24 * time.Hour)}, now.Add(-24*time.Hour).Truncate(24*time.Hour), now.Truncate(24*time.Hour))
+	report, err := a.buildReport(scopedTestRequest(a,httptest.NewRequest("GET", "/", nil)), reportFilter{Type: "logs", cutoff: now.Add(-24 * time.Hour)}, now.Add(-24*time.Hour).Truncate(24*time.Hour), now.Truncate(24*time.Hour))
 	if err != nil || report.Originals != 1 || report.ByDevice["outside"] != 0 || report.ByDevice["PC"] != 1 {
 		t.Fatal("inaccurate distribution", report, err)
 	}

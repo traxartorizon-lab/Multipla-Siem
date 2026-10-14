@@ -84,6 +84,13 @@ func descriptionKey(message string) string {
 // Only response/notification copies are changed; the journal remains evidence.
 // Call while holding a.mu.
 func (a *App) classifiedEvent(e Event) Event {
+	if e.Detector == "direct-siem-isolation" {
+		e.Level = 15
+		e.Alert = true
+		e.Classification = nil
+		e.Review = nil
+		return e
+	}
 	if e.Kind == "pfsense" && pfsenseSSHThreat(e.Message) {
 		e.Level = 12
 		e.Alert = true

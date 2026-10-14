@@ -17,7 +17,7 @@ func TestHistoryIncludes24HoursAcrossDaysWithoutMemory(t *testing.T) {
 	}
 	a.events = nil
 	r := httptest.NewRequest("GET", "/api/events/history", nil)
-	events, more, partial, err := a.historyEvents(r, 0, "")
+	events, more, partial, err := a.historyEvents(scopedTestRequest(a,r), 0, "")
 	if err != nil || more || partial || len(events) != 2 {
 		t.Fatal(len(events), more, partial, err)
 	}
@@ -31,7 +31,7 @@ func TestHistoryFiltersStoredTimeRangeAndIP(t *testing.T) {
   {ID:"other",Time:now.Add(-48*time.Hour),Message:"DHCP failure",SourceIP:"192.0.2.11"},
  } {if !a.appendEvent(e){t.Fatal("journal")}}
  q:=url.Values{"from":{now.Add(-49*time.Hour).Format(time.RFC3339Nano)},"to":{now.Add(-47*time.Hour).Format(time.RFC3339Nano)},"q":{"192.0.2.10"}}
- events,more,partial,err:=a.historyEvents(httptest.NewRequest("GET","/api/events/history?"+q.Encode(),nil),0,"")
+ events,more,partial,err:=a.historyEvents(scopedTestRequest(a,httptest.NewRequest("GET","/api/events/history?"+q.Encode(),nil)),0,"")
  if err!=nil || more || partial || len(events)!=1 || events[0].ID!="inside" {t.Fatal(events,more,partial,err)}
  for _,values:=range []url.Values{
   {"from":{"bad"}},

@@ -165,6 +165,16 @@ func (a *App) registerAssistantRoutes(mux *http.ServeMux) {
 		}
 		input.Question = strings.TrimSpace(input.Question)
 		clients := a.assistantClients()
+		scope := a.requestScope(r)
+		if !scope.Global {
+			filtered := []string{}
+			for _, c := range clients {
+				if scope.Clients[c] {
+					filtered = append(filtered, c)
+				}
+			}
+			clients = filtered
+		}
 		if input.Question == "" || len(input.Question) > 2000 || len(input.History) > 6000 || len(input.Context) > 6000 || len(input.Page) > 40 || !validAssistantClient(input.Client, clients) {
 			http.Error(w, "Pergunta ou contexto inválido", 400)
 			return
@@ -209,7 +219,8 @@ func (a *App) registerAssistantRoutes(mux *http.ServeMux) {
 			return
 		}
 		f := input.Filter
-		if !validAssistantClient(f.Client, a.assistantClients()) || len(f.Query) > 128 || len(input.Question) > 2000 || input.Offset < 0 || input.Offset > 10000 || (input.Report && input.Offset != 0) {
+		scope := a.requestScope(r)
+		if (!scope.Global && f.Client != "" && !scope.Clients[f.Client]) || !validAssistantClient(f.Client, a.assistantClients()) || len(f.Query) > 128 || len(input.Question) > 2000 || input.Offset < 0 || input.Offset > 10000 || (input.Report && input.Offset != 0) {
 			http.Error(w, "Filtros inválidos", 400)
 			return
 		}

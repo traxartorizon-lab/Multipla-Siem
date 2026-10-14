@@ -3,7 +3,7 @@ let hostHealthData=null,notificationData=null,hostHealthBusy=false,notificationD
 function hostValue(value){return Number.isFinite(value)?value.toFixed(0)+'%':'—'}
 async function refreshHostHealth(force=false){
  if(page==='notifications'&&hostHealthData)renderNotificationCenter();const needsNotifications=page==='notifications'&&!notificationData;if(!snapshot||hostHealthBusy||!force&&!needsNotifications&&Date.now()-hostHealthFetched<5000)return;hostHealthBusy=true;
- try{hostHealthData=await api('/api/system/health');hostHealthFetched=Date.now();renderHostHeader();if(page==='notifications'||notificationDialog?.open){notificationData=await api('/api/notifications');if(page==='notifications')renderNotificationCenter();if(notificationDialog?.open)renderNotificationPopup()}}
+ try{if(snapshot.scoped){notificationData=await api('/api/notifications');hostHealthData={health:{},unread:notificationData.unread};renderHostHeader();renderNotificationPopup();if(page==='notifications')renderNotificationCenter();return}hostHealthData=await api('/api/system/health');hostHealthFetched=Date.now();renderHostHeader();if(page==='notifications'||notificationDialog?.open){notificationData=await api('/api/notifications');if(page==='notifications')renderNotificationCenter();if(notificationDialog?.open)renderNotificationPopup()}}
  catch(error){const button=$('#host-health-button');button.querySelector('i').className='host-health-dot unknown';$('#host-health-summary').textContent='Servidor: sem dados';button.title=error.message}
  finally{hostHealthBusy=false}
 }

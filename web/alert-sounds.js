@@ -4,6 +4,7 @@ let alertSoundAccount='',alertSoundSettings={enabled:false,sound:'beep',volume:4
 function alertSoundStatus(message){$('#alert-sound-status').textContent=message;if(typeof syncEventSoundButton==='function')syncEventSoundButton()}
 function saveAlertSoundSettings(){try{localStorage.setItem('multipla.alert-sound.'+alertSoundAccount,JSON.stringify(alertSoundSettings))}catch{alertSoundStatus('Não foi possível salvar a preferência neste navegador.')}}
 function syncAlertSoundSettings(account){
+ if(window.multiplaNativeAudio){alertSoundAccount=account;return;}
  if(account===alertSoundAccount)return;stopAlertSound();alertSoundAccount=account;alertSoundReady=false;alertSoundPrimed=false;alertSoundSeen.clear();alertSoundSettings={enabled:false,sound:'beep',volume:40};
  try{const p=JSON.parse(localStorage.getItem('multipla.alert-sound.'+account)||'null');if(p)alertSoundSettings={enabled:p.enabled===true,sound:Object.hasOwn(alertSoundFiles,p.sound)?p.sound:'beep',volume:Number.isInteger(p.volume)&&p.volume>=0&&p.volume<=100?p.volume:40}}catch{}
  $('#alert-sound-enabled').checked=alertSoundSettings.enabled;$('#alert-sound-choice').value=alertSoundSettings.sound;$('#alert-sound-volume').value=alertSoundSettings.volume;
@@ -11,10 +12,12 @@ function syncAlertSoundSettings(account){
 }
 function stopAlertSound(){clearTimeout(alertSoundStopTimer);if(alertSoundPlayer){alertSoundPlayer.pause();alertSoundPlayer.currentTime=0;alertSoundPlayer=null}}
 async function playAlertSound(sound=alertSoundSettings.sound){
+ if(window.multiplaNativeAudio){alertSoundStatus("No app, o áudio usa a saída do Windows configurada acima.");return;}
  stopAlertSound();const player=new Audio(alertSoundFiles[sound]);alertSoundPlayer=player;player.volume=alertSoundSettings.volume/100;
  try{if(alertOutputDevice){if(typeof player.setSinkId!=='function')throw new Error('Saída não suportada');await player.setSinkId(alertOutputDevice)}if(alertSoundPlayer!==player)return;await player.play();alertSoundReady=true;alertSoundStatus('Áudio disponível nesta sessão.');alertSoundStopTimer=setTimeout(()=>{if(alertSoundPlayer===player)stopAlertSound()},4000)}catch{alertSoundReady=false;alertSoundStatus(alertOutputDevice?'Não foi possível usar a saída selecionada. Selecione novamente a saída de áudio.':'Reprodução bloqueada ou indisponível. Clique em Testar e habilitar áudio.')}
 }
 function observeCriticalSounds(s){
+ if(window.multiplaNativeAudio)return;
  syncAlertSoundSettings(s.email);observeInvasionAlerts(s);let found=false,chosenSound=alertSoundSettings.sound;const now=Date.now();
  for(const event of [...(s.events||[]),...(s.critical_events||[])]){const critical=event.classification?.critical!==false&&event.review?.status!=='false_positive'&&(Number(event.review?.level||event.level)>=12||!!event.diagnosis);if(!critical||!event.id||event.detector==='ssh-login-burst')continue;
   if(!alertSoundSeen.has(event.id)){alertSoundSeen.add(event.id);if(alertSoundPrimed&&Date.parse(event.time)>=now-120000&&event.classification?.sound!==false){found=true;chosenSound=event.classification?.sound_type||alertSoundSettings.sound}}
@@ -38,6 +41,7 @@ const alertOutputLabel=el('label','Saída de áudio dos alertas'),alertOutputSel
 alertOutputSelect.setAttribute('aria-label','Saída de áudio dos alertas');alertOutputChoose.type='button';alertOutputLabel.append(alertOutputSelect);$('#alert-sound-choice').closest('label').after(alertOutputLabel,alertOutputChoose,alertOutputHelp);
 function saveAlertOutput(id){stopAlertSound();alertOutputDevice=id;try{localStorage.setItem('multipla.alert-output',id)}catch{}alertSoundStatus('Saída alterada. Clique em Testar e habilitar áudio para conferir.')}
 async function refreshAlertOutputs(){
+ if(window.multiplaNativeAudio)return;
  alertOutputSelect.replaceChildren();const standard=el('option','Padrão do sistema');standard.value='';alertOutputSelect.append(standard);
  if(typeof HTMLMediaElement.prototype.setSinkId!=='function'){alertOutputSelect.disabled=true;alertOutputChoose.disabled=true;alertOutputHelp.textContent='Este navegador não permite escolher a saída pelo SIEM. Use o mixer de volume do sistema para direcionar o navegador às caixas de som.';return}
  try{const devices=await navigator.mediaDevices.enumerateDevices();let index=0;for(const device of devices.filter(d=>d.kind==='audiooutput'&&d.deviceId&&d.deviceId!=='default')){const option=el('option',device.label||'Saída de áudio '+(++index));option.value=device.deviceId;alertOutputSelect.append(option)}}catch{}
@@ -54,7 +58,7 @@ alertOutputChoose.onclick=async()=>{
  }catch{alertSoundStatus('Permissão cancelada ou indisponível. Confira a permissão de microfone do site ou use o mixer do sistema.')}
  finally{if(typeof HTMLMediaElement.prototype.setSinkId==='function')alertOutputChoose.disabled=false}
 };
-navigator.mediaDevices?.addEventListener('devicechange',refreshAlertOutputs);refreshAlertOutputs();
+if(!window.multiplaNativeAudio){navigator.mediaDevices?.addEventListener('devicechange',refreshAlertOutputs);refreshAlertOutputs();}
 
 let invasionAccount='',invasionSeen=new Set(),invasionPopup=null;
 function observeInvasionAlerts(s){

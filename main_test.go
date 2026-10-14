@@ -16,7 +16,7 @@ import (
 func testApp(t *testing.T) *App {
 	t.Helper()
 	dir := t.TempDir()
-	c := Config{Listen: "127.0.0.1:8080", Syslog: "127.0.0.1:5514", PublicURL: "http://127.0.0.1:8080", DataDir: dir, RetentionDays: 7, BlockMinutes: 60, MailMinLevel: 10, AllowedEmails: []string{"admin@gmail.com"}, Devices: []Device{{Name:"Firewall", IP:"192.168.1.1", Kind:"pfsense"}}}
+	c := Config{Listen: "127.0.0.1:8080", Syslog: "127.0.0.1:5514", PublicURL: "http://127.0.0.1:8080", DataDir: dir, RetentionDays: 7, BlockMinutes: 60, MailMinLevel: 10, AllowedEmails: []string{"admin@gmail.com"}, Devices: []Device{{Name: "Firewall", IP: "192.168.1.1", Kind: "pfsense"}}}
 	path := filepath.Join(dir, "config.json")
 	if e := atomicJSON(path, c); e != nil {
 		t.Fatal(e)
@@ -29,6 +29,18 @@ func testApp(t *testing.T) *App {
 }
 
 type roundTrip func(*http.Request) (*http.Response, error)
+
+// Private reader fixtures carry the same account context as an authorized route.
+func scopedTestRequest(a *App, r *http.Request) *http.Request {
+	if _, ok := a.session(r); ok {
+		return r
+	}
+	fixture := featureRequest(a, "admin@gmail.com", r.Method, r.URL.String(), nil)
+	for _, cookie := range fixture.Cookies() {
+		r.AddCookie(cookie)
+	}
+	return r
+}
 
 func testRequest(method, path string, body io.Reader) *http.Request {
 	r := httptest.NewRequest(method, path, body)
@@ -145,6 +157,8 @@ func TestSourceParsing(t *testing.T) {
 }
 func TestCorrelationAndDurableReplay(t *testing.T) {
 	a := testApp(t)
+	automatic := false
+	a.state.ProblemAutomatic = &automatic // Correlation is tested independently of display grouping.
 	d := Device{Name: "Proxmox", IP: "192.168.1.10", Kind: "proxmox"}
 	for i := 0; i < 4; i++ {
 		a.ingest(d, "Failed password from 203.0.113.22")
@@ -213,7 +227,7 @@ func TestAuthCSRFAndOAuthState(t *testing.T) {
 	if w.Code != 401 {
 		t.Fatal("public snapshot")
 	}
-	a.sessions["s"] = Session{"", "admin@gmail.com", "csrf", time.Now().Add(time.Hour)}
+	a.sessions["s"] = Session{Email: "admin@gmail.com", CSRF: "csrf", Expires: time.Now().Add(time.Hour)}
 	for _, origin := range []string{"", "https://evil.example"} {
 		r := testRequest("POST", "/api/blocks", strings.NewReader(`{"ip":"198.51.100.9","reason":"test"}`))
 		r.AddCookie(&http.Cookie{Name: "multipla_session", Value: "s"})
@@ -239,7 +253,7 @@ func TestAuthCSRFAndOAuthState(t *testing.T) {
 	if w.Code != 403 {
 		t.Fatal("invalid OAuth state accepted")
 	}
-	a.sessions["s"] = Session{"", "admin@gmail.com", "csrf", time.Now().Add(-time.Minute)}
+	a.sessions["s"] = Session{Email: "admin@gmail.com", CSRF: "csrf", Expires: time.Now().Add(-time.Minute)}
 	r = testRequest("GET", "/api/snapshot", nil)
 	r.AddCookie(&http.Cookie{Name: "multipla_session", Value: "s"})
 	w = httptest.NewRecorder()

@@ -1,0 +1,11 @@
+{
+  "network_devices": 0,
+  "installation_elapsed_seconds": 1250,
+  "original_iso_payload_installed": true,
+  "serial_marker_initially_missing": true,
+  "offline": true,
+  "automatic_firstboot_wizard": true,
+  "verification_resolved_on_installed_system": true,
+  "base_os_installed": true,
+  "mode": "BIOS"
+}

@@ -59,6 +59,7 @@ def brand_initrd(data):
 
 def package(root):
     files = ['update.example.json', 'scripts/multipla-update', 'dist/multipla-update-linux-amd64', 'UPDATES.md', 'FULL-BACKUP.md', 'LOCAL-AI.md', 'scripts/install-updates.sh', 'config.example.json', 'deploy/multipla-siem.service', 'deploy/multipla-firstboot.service', 'scripts/install.sh', 'scripts/multipla-setup', 'scripts/verify-installation.sh', 'dist/multipla-siem-linux-amd64', 'README.md', 'VERSION', 'CHANGELOG.md', 'INSTALLATION-ISO.md', 'SECURITY-REVIEW.md', 'BACKUP-DRIVE.md', 'UNIFI-SNMP-WEBHOOK.md', 'THIRD-PARTY-NOTICES.md', 'integrations/custom-multipla-siem', 'integrations/wazuh.xml', 'deploy/proxmox-rsyslog.conf']
+    files += ['release/bootstrap-manifest-amd64.json','release/bootstrap-manifest-amd64.sig','release/trusted-release-public.pem','scripts/verify-package.py','SECURITY-RUNBOOK.md','bootstrap-amd64.sha256']
     for path in files:
         if not (root/path).is_file():
             raise ValueError('Missing payload file: '+path)

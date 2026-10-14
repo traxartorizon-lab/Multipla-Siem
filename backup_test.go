@@ -16,7 +16,7 @@ import (
 )
 
 func featureRequest(a *App, email, method, path string, body []byte) *http.Request {
-	a.sessions["feature-session"] = Session{"", email, "csrf", time.Now().Add(time.Hour)}
+	a.sessions["feature-session"] = Session{Email: email, CSRF: "csrf", Expires: time.Now().Add(time.Hour)}
 	a.active["feature-session"] = time.Now()
 	r := testRequest(method, path, bytes.NewReader(body))
 	r.AddCookie(&http.Cookie{Name: a.sessionName(), Value: "feature-session"})

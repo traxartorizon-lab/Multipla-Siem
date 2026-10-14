@@ -42,7 +42,7 @@ func TestServerTerminalFixedTargetAndExplicitLinuxUser(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "POST", "/api/ssh/sessions", []byte(`{"id":"__multipla_local_server__","user":"siemadmin","password":"temporary"}`)))
-	if w.Code != 409 {
+	if w.Code != 400 {
 		t.Fatal("local terminal must require confirmed host identity", w.Code, w.Body.String())
 	}
 	if len(a.sshTerminals) != 0 {
@@ -63,6 +63,14 @@ func TestServerTerminalUsesSSHKeyAndInteractiveChannel(t *testing.T) {
 	hostSigner, _ := ssh.NewSignerFromKey(hostPrivate)
 	_, clientPrivate, _ := ed25519.GenerateKey(rand.Reader)
 	clientSigner, _ := ssh.NewSignerFromKey(clientPrivate)
+	oldDelegated := delegatedSSHAuth
+	defer func() { delegatedSSHAuth = oldDelegated }()
+	delegatedSSHAuth = func(ctx context.Context, d NetworkEquipment, owner string) (ssh.AuthMethod, error) {
+		if d.SSHUser != "multipla-ops" || owner != "admin@gmail.com" {
+			return nil, io.EOF
+		}
+		return ssh.PublicKeys(clientSigner), nil
+	}
 	block, err := ssh.MarshalPrivateKey(clientPrivate, "test-only")
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +82,7 @@ func TestServerTerminalUsesSSHKeyAndInteractiveChannel(t *testing.T) {
 	defer listener.Close()
 	received := make(chan string, 1)
 	config := &ssh.ServerConfig{PublicKeyCallback: func(info ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-		if info.User() != "siemadmin" || !bytes.Equal(key.Marshal(), clientSigner.PublicKey().Marshal()) {
+		if info.User() != "multipla-ops" || !bytes.Equal(key.Marshal(), clientSigner.PublicKey().Marshal()) {
 			return nil, io.EOF
 		}
 		return &ssh.Permissions{}, nil
@@ -135,7 +143,8 @@ func TestServerTerminalUsesSSHKeyAndInteractiveChannel(t *testing.T) {
 	a.demo = false
 	a.nativeTLS = true
 	a.state.SSHHostKeys = map[string]SSHHostIdentity{localServerSSHID: {IP: "127.0.0.1", Port: 22, Key: base64.StdEncoding.EncodeToString(hostSigner.PublicKey().Marshal()), Fingerprint: ssh.FingerprintSHA256(hostSigner.PublicKey())}}
-	body, _ := json.Marshal(map[string]string{"id": localServerSSHID, "user": "siemadmin", "private_key": string(pem.EncodeToMemory(block))})
+	_ = pem.EncodeToMemory(block) // test key never enters an HTTP body
+	body, _ := json.Marshal(map[string]string{"id": localServerSSHID, "user": "multipla-ops"})
 	w := httptest.NewRecorder()
 	a.routes().ServeHTTP(w, featureRequest(a, "admin@gmail.com", "POST", "/api/ssh/sessions", body))
 	if w.Code != 200 {
