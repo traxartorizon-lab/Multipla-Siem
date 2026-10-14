@@ -15,4 +15,3 @@ for arch in ['amd64','arm64']:files.update(json.loads((r/'release'/f'bootstrap-m
 files.update(['release/bootstrap-manifest-amd64.json','release/bootstrap-manifest-amd64.sig','release/bootstrap-manifest-arm64.json','release/bootstrap-manifest-arm64.sig'])
 with zipfile.ZipFile(out/f'Multipla-SIEM-Linux-{version}-Assinado.zip','w',zipfile.ZIP_DEFLATED) as archive:
  for name in sorted(files):archive.write(r/name,name)
-
