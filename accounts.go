@@ -7,6 +7,7 @@ import (
 )
 
 type AccessAccount struct {
+	Group    string `json:"group,omitempty"`
 	Role     string `json:"role"`
 	Salt     string `json:"salt,omitempty"`
 	Hash     string `json:"password_hash,omitempty"`
@@ -18,7 +19,16 @@ func (a *App) roleLocked(email string) string {
 		if account.Disabled {
 			return "disabled"
 		}
-		if account.Role == "admin" {
+		if account.Group != "" && !validAccessGroup(account.Group) {
+			return "disabled"
+		}
+		if strings.EqualFold(email, a.state.LocalAdmin.Email) {
+			return "admin"
+		}
+		if account.Group == groupAlerts {
+			return "viewer"
+		}
+		if account.Group == groupAdministrative || account.Group == groupSuperadmin || account.Role == "admin" {
 			return "admin"
 		}
 		return "viewer"
@@ -33,13 +43,14 @@ func (a *App) registerAccountRoutes(mux *http.ServeMux) {
 		rows := []map[string]any{}
 		for _, email := range a.cfg.AllowedEmails {
 			account := a.state.Accounts[strings.ToLower(email)]
-			rows = append(rows, map[string]any{"email": email, "role": a.roleLocked(email), "disabled": account.Disabled, "local_login": account.Hash != "" || strings.EqualFold(email, a.state.LocalAdmin.Email), "primary": strings.EqualFold(email, a.state.LocalAdmin.Email)})
+			rows = append(rows, map[string]any{"email": email, "role": a.roleLocked(email), "group": a.groupLocked(email), "disabled": account.Disabled, "local_login": account.Hash != "" || strings.EqualFold(email, a.state.LocalAdmin.Email), "primary": strings.EqualFold(email, a.state.LocalAdmin.Email)})
 		}
 		writeJSON(w, map[string]any{"accounts": rows})
 	}))
 	mux.HandleFunc("PUT /api/accounts", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			Email    string `json:"email"`
+			Group    string `json:"group"`
 			Role     string `json:"role"`
 			Password string `json:"password"`
 			Disabled bool   `json:"disabled"`
@@ -48,6 +59,16 @@ func (a *App) registerAccountRoutes(mux *http.ServeMux) {
 			return
 		}
 		input.Email = strings.ToLower(strings.TrimSpace(input.Email))
+		if input.Group != "" {
+			if !validAccessGroup(input.Group) {
+				http.Error(w, "Grupo inválido", 400)
+				return
+			}
+			input.Role = "admin"
+			if input.Group == groupAlerts {
+				input.Role = "viewer"
+			}
+		}
 		address, err := mail.ParseAddress(input.Email)
 		if err != nil || address.Address != input.Email || len(input.Email) > 254 || (input.Role != "admin" && input.Role != "viewer") || (input.Password != "" && (len(input.Password) < 14 || len(input.Password) > 256)) {
 			http.Error(w, "Email, perfil ou senha invalidos; senha deve ter 14 a 256 caracteres", 400)
@@ -77,7 +98,7 @@ func (a *App) registerAccountRoutes(mux *http.ServeMux) {
 		if input.Password == "" {
 			salt, hash = previous.Salt, previous.Hash
 		}
-		accounts[input.Email] = AccessAccount{Role: input.Role, Salt: salt, Hash: hash, Disabled: input.Disabled}
+		accounts[input.Email] = AccessAccount{Group: input.Group, Role: input.Role, Salt: salt, Hash: hash, Disabled: input.Disabled}
 		if len(accounts) > 100 {
 			http.Error(w, "Limite de contas atingido", 400)
 			return

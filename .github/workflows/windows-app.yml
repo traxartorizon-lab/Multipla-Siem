@@ -1,0 +1,40 @@
+name: Validate Windows SIEM app
+on:
+  push:
+    branches: [main]
+    paths: ['desktop/**', '.github/workflows/windows-app.yml']
+  pull_request:
+    paths: ['desktop/**', '.github/workflows/windows-app.yml']
+permissions:
+  contents: read
+jobs:
+  windows-app:
+    runs-on: windows-2025
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install verified SDK
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'dotnet-sdk.zip'
+          Invoke-WebRequest 'https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.402/dotnet-sdk-10.0.402-win-x64.zip' -OutFile $archive
+          $expected = 'ae4fd528cb7e9f6af6aaf7de36715a69f761f183744f1bb3025d19f5a92447090ec561410e46266c1d10a63781ed6f3de771760bc76c876d87daabc367b898cd'
+          if ((Get-FileHash $archive -Algorithm SHA512).Hash.ToLowerInvariant() -ne $expected) { throw 'SDK integrity failed' }
+          $sdk = Join-Path $env:RUNNER_TEMP 'multipla-dotnet'
+          Expand-Archive -LiteralPath $archive -DestinationPath $sdk
+          $sdk | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+      - name: Restore, audit, build and self-test
+        shell: pwsh
+        run: |
+          dotnet restore desktop/Multipla.Siem.Desktop.csproj --locked-mode -r win-x64
+          if ($LASTEXITCODE -ne 0) { throw 'Restore/audit failed' }
+          dotnet publish desktop/Multipla.Siem.Desktop.csproj -c Release -r win-x64 --self-contained true --no-restore -o app-package
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+          $app = Join-Path $PWD 'app-package/Multipla.Siem.exe'
+          $process = Start-Process -FilePath $app -ArgumentList '--self-test' -WindowStyle Hidden -PassThru -Wait
+          if ($process.ExitCode -ne 0 -or !(Test-Path app-package/self-test-result.txt)) { throw 'Self-test failed' }
+          Get-Content app-package/self-test-result.txt

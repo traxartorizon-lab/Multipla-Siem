@@ -237,6 +237,9 @@ func (a *App) requestGuard(w http.ResponseWriter, r *http.Request) bool {
 	cat := ""
 	limit := 0
 	switch {
+	case r.URL.Path == "/auth/desktop/status":
+		cat = "desktop-login-poll"
+		limit = 45
 	case strings.HasPrefix(r.URL.Path, "/auth/"):
 		cat = "auth"
 		limit = 20

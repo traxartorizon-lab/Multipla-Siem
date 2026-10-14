@@ -49,3 +49,19 @@ func TestEventClientIndexDoesNotMixAmbiguousNames(t *testing.T) {
 		t.Fatal("sender mapping")
 	}
 }
+
+func TestCriticalClientHistoryFiltersBeforePagination(t *testing.T) {
+	a := testApp(t)
+	a.cfg.Devices = []Device{{Name: "alpha", Client: "Alpha"}, {Name: "beta", Client: "Beta"}}
+	for i := 0; i < 110; i++ {
+		a.appendEvent(Event{ID: token(), Time: time.Now().Add(-time.Minute), Device: "alpha", Level: 1, Message: "ordinary"})
+	}
+	for _, e := range []Event{{ID: "critical-alpha", Device: "alpha", Level: 12}, {ID: "alert-alpha", Device: "alpha", Level: 10, Alert: true}, {ID: "critical-beta", Device: "beta", Level: 12}} {
+		e.Time = time.Now().Add(-time.Minute)
+		a.appendEvent(e)
+	}
+	events, more, partial, err := a.historyEvents(httptest.NewRequest("GET", "/api/events/history?critical=1&client=Alpha", nil), 0, "")
+	if err != nil || more || partial || len(events) != 1 || events[0].ID != "critical-alpha" {
+		t.Fatal(events, more, partial, err)
+	}
+}

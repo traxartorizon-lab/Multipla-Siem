@@ -36,9 +36,17 @@ func historyTimeRange(r *http.Request, now time.Time) (time.Time, time.Time, err
 
 // Read journals backwards so pagination never depends on the in-memory dashboard window.
 func (a *App) historyEvents(r *http.Request, offset int, matchID string) ([]Event, bool, bool, error) {
-	return a.readHistoryEvents(r, offset, matchID, false, 100)
+	session, _ := a.session(r)
+	a.mu.Lock()
+	alertsOnly := a.groupLocked(session.Email) == groupAlerts
+	a.mu.Unlock()
+	return a.readHistoryEvents(r, offset, matchID, alertsOnly || r.URL.Query().Get("critical") == "1", 100)
 }
 func (a *App) readHistoryEvents(r *http.Request, offset int, matchID string, criticalOnly bool, limit int) ([]Event, bool, bool, error) {
+	session, _ := a.session(r)
+	a.mu.Lock()
+	alertsOnly := a.groupLocked(session.Email) == groupAlerts
+	a.mu.Unlock()
 	now := time.Now().UTC()
 	cut, end, rangeErr := historyTimeRange(r, now)
 	if rangeErr != nil {
@@ -66,7 +74,7 @@ func (a *App) readHistoryEvents(r *http.Request, offset int, matchID string, cri
 	}
 	var classifier *App
 	var clientIndex map[string]string
-	if matchID == "" {
+	if matchID == "" || criticalOnly {
 		a.mu.Lock()
 		clientIndex = a.eventClientIndex()
 		if criticalOnly {
@@ -138,6 +146,12 @@ func (a *App) readHistoryEvents(r *http.Request, offset int, matchID string, cri
 				}
 				if matchID != "" {
 					if event.ID == matchID {
+						if alertsOnly {
+							event = classifier.classifiedEvent(event)
+							if !event.Alert && event.Level < 12 {
+								continue
+							}
+						}
 						f.Close()
 						return []Event{event}, false, false, nil
 					}
@@ -157,7 +171,7 @@ func (a *App) readHistoryEvents(r *http.Request, offset int, matchID string, cri
 				}
 				if criticalOnly {
 					event = classifier.classifiedEvent(event)
-					if (event.Level < 12 || (event.Review != nil && event.Review.Status == "false_positive")) && !(r.URL.Path == "/api/events/critical-ips" && securityLogSourceIP(event.Message) != "") {
+					if ((event.Level < 12 && !(alertsOnly && r.URL.Query().Get("critical") != "1" && event.Alert)) || (event.Review != nil && event.Review.Status == "false_positive")) && !(r.URL.Path == "/api/events/critical-ips" && securityLogSourceIP(event.Message) != "") {
 						continue
 					}
 				}

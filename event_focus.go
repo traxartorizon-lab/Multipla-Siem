@@ -56,7 +56,9 @@ func (f EventFocus) matches(e Event) bool {
 	return f.Rule != "" && e.Alert && e.Rule == f.Rule && e.Detector == f.Detector
 }
 func (a *App) resolveEventFocus(r *http.Request, id string) (EventFocus, error) {
+	session, _ := a.session(r)
 	a.mu.Lock()
+	alertsOnly := a.groupLocked(session.Email) == groupAlerts
 	for _, n := range a.state.Notifications {
 		if n.EventID == id && n.Focus != nil {
 			f := *n.Focus
@@ -66,6 +68,13 @@ func (a *App) resolveEventFocus(r *http.Request, id string) (EventFocus, error) 
 	}
 	for _, e := range a.events {
 		if e.ID == id {
+			if alertsOnly {
+				e = a.classifiedEvent(e)
+				if !e.Alert && e.Level < 12 {
+					a.mu.Unlock()
+					return EventFocus{}, errors.New("Gatilho indisponível")
+				}
+			}
 			f := focusForEvent(e)
 			a.mu.Unlock()
 			return f, nil

@@ -107,6 +107,9 @@ type Audit struct {
 	Action string    `json:"action"`
 }
 type State struct {
+	DesktopGrants        map[string]DesktopGrant    `json:"desktop_grants,omitempty"`
+	NotificationReads    map[string]map[string]bool `json:"notification_reads,omitempty"`
+	AppUpdateRequested   time.Time                  `json:"app_update_requested,omitempty"`
 	Notifications        []SystemNotification       `json:"notifications,omitempty"`
 	NotificationsCleared map[string]time.Time       `json:"notifications_cleared,omitempty"`
 	HostConditions       map[string]bool            `json:"host_conditions,omitempty"`
@@ -145,6 +148,7 @@ type Session struct {
 	Expires time.Time
 }
 type OAuth struct {
+	DesktopID    string
 	DriveSubject string
 	DriveEmail   string
 	Verifier     string
@@ -155,6 +159,7 @@ type bucket struct {
 	Last  time.Time
 }
 type App struct {
+	desktopLogins     map[string]DesktopLogin
 	hostHealth        HostHealth
 	hostPrevious      HostCounters
 	notificationDirty bool
@@ -1067,9 +1072,14 @@ func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		a.mu.Lock()
 		role := a.roleLocked(s.Email)
+		group := a.groupLocked(s.Email)
 
 		a.mu.Unlock()
-		if role != "admin" && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && !(r.Method == "PUT" && r.URL.Path == "/api/dashboard/layout") && !(r.Method == "POST" && r.URL.Path == "/api/notifications/clear") && !(r.Method == "POST" && (r.URL.Path == "/api/assistant/plan" || r.URL.Path == "/api/assistant/query")) && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export" && r.URL.Path != "/api/events/history" && r.URL.Path != "/api/devices/metrics" && r.URL.Path != "/api/devices/resource-history" && r.URL.Path != "/api/system/health" && r.URL.Path != "/api/system/usage-history" && r.URL.Path != "/api/notifications" && r.URL.Path != "/api/events/critical-ips" && r.URL.Path != "/api/dashboard/distribution" && r.URL.Path != "/api/dashboard/activity" && r.URL.Path != "/api/reports" && r.URL.Path != "/api/network")) {
+		if !groupAllows(group, r.Method, r.URL.Path) {
+			http.Error(w, "Grupo sem permissão para esta operação", 403)
+			return
+		}
+		if role != "admin" && !strings.HasPrefix(r.URL.Path, "/api/desktop/grants") && !(strings.HasPrefix(r.URL.Path, "/api/notifications/") && strings.HasSuffix(r.URL.Path, "/read")) && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && !(r.Method == "PUT" && r.URL.Path == "/api/dashboard/layout") && !(r.Method == "POST" && r.URL.Path == "/api/notifications/clear") && !(r.Method == "POST" && (r.URL.Path == "/api/assistant/plan" || r.URL.Path == "/api/assistant/query")) && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export" && r.URL.Path != "/api/events/history" && r.URL.Path != "/api/devices/metrics" && r.URL.Path != "/api/devices/resource-history" && r.URL.Path != "/api/system/health" && r.URL.Path != "/api/system/usage-history" && r.URL.Path != "/api/notifications" && r.URL.Path != "/api/events/critical-ips" && r.URL.Path != "/api/dashboard/distribution" && r.URL.Path != "/api/dashboard/activity" && r.URL.Path != "/api/reports" && r.URL.Path != "/api/network")) {
 			http.Error(w, "Perfil somente visualizacao: operacao nao permitida", 403)
 			return
 		}
@@ -1098,7 +1108,11 @@ func (a *App) oauthStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "limite de autenticações", 429)
 		return
 	}
-	a.oauth[state] = OAuth{Verifier: verifier, Expires: time.Now().Add(5 * time.Minute)}
+	desktopID := ""
+	if r.URL.Path == "/auth/desktop/google" {
+		desktopID = r.URL.Query().Get("id")
+	}
+	a.oauth[state] = OAuth{DesktopID: desktopID, Verifier: verifier, Expires: time.Now().Add(5 * time.Minute)}
 	a.mu.Unlock()
 	a.cookie(w, a.oauthName(), state, 300)
 	hash := sha256.Sum256([]byte(verifier))
@@ -1166,6 +1180,10 @@ func (a *App) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Conta sem autorização", 403)
 		return
 	}
+	if flow.DesktopID != "" {
+		a.desktopLoginConsent(w, r, flow.DesktopID, u.Email, u.Sub)
+		return
+	}
 	if flow.DriveEmail != "" {
 		s, valid := a.session(r)
 		granted := false
@@ -1205,6 +1223,9 @@ func (a *App) routes() http.Handler {
 	a.registerResourceHistoryRoutes(mux)
 	a.registerHostHealthRoutes(mux)
 	a.registerSystemRoutes(mux)
+	a.registerUpdateRoutes(mux)
+	a.registerDesktopRoutes(mux)
+	a.registerDesktopLoginRoutes(mux)
 	a.registerSSHRoutes(mux)
 	a.registerDHCPRoutes(mux)
 	a.registerTemporaryReportRoutes(mux)
@@ -1230,10 +1251,10 @@ func (a *App) routes() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(b)
 	})
-	for _, path := range []string{"collectors.js", "server-terminal.js", "assistant.js", "host-chart.js", "style.css", "favicon.svg", "alert-sounds.js", "critical-controls.js", "host-health.js", "device-network.js", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "n8n.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
+	for _, path := range []string{"desktop-link.js", "app-update.js", "collectors.js", "server-terminal.js", "assistant.js", "host-chart.js", "style.css", "favicon.svg", "alert-sounds.js", "critical-controls.js", "host-health.js", "device-network.js", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "n8n.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
 		p := path
 		mux.HandleFunc("GET /"+p, func(w http.ResponseWriter, r *http.Request) {
-			if p == "collectors.js" || p == "server-terminal.js" || p == "assistant.js" || p == "host-chart.js" || p == "host-health.js" || p == "critical-controls.js" || p == "n8n.js" || p == "alert-sounds.js" || p == "device-network.js" || p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" || p == "dashboard.js" || p == "reports.js" || p == "network.js" || p == "ssh.js" || p == "dhcp.js" || p == "test-reports.js" || p == "xterm.js" {
+			if p == "desktop-link.js" || p == "app-update.js" || p == "collectors.js" || p == "server-terminal.js" || p == "assistant.js" || p == "host-chart.js" || p == "host-health.js" || p == "critical-controls.js" || p == "n8n.js" || p == "alert-sounds.js" || p == "device-network.js" || p == "app.js" || p == "backup.js" || p == "accounts.js" || p == "login.js" || p == "receivers.js" || p == "dashboard.js" || p == "reports.js" || p == "network.js" || p == "ssh.js" || p == "dhcp.js" || p == "test-reports.js" || p == "xterm.js" {
 				w.Header().Set("Content-Type", "text/javascript")
 			} else if p == "favicon.svg" {
 				w.Header().Set("Content-Type", "image/svg+xml")
@@ -1378,6 +1399,10 @@ func (a *App) routes() http.Handler {
 		}
 		visibleConfig := a.cfg
 		visibleAudit := a.state.Audit
+		if a.groupLocked(s.Email) == groupAdministrative {
+			visibleConfig.AllowedEmails = []string{s.Email}
+			visibleAudit = nil
+		}
 		if role != "admin" {
 			visibleConfig.AllowedEmails = []string{s.Email}
 			visibleConfig.FeedAllowed = nil
@@ -1397,7 +1422,18 @@ func (a *App) routes() http.Handler {
 				}
 			}
 		}
-		writeJSON(w, map[string]any{"version": productVersion(), "role": role, "snmp_devices": snmpDevices, "event_clients": a.eventClientIndex(), "preferences": a.preferences(s.Email), "drive_connected": a.state.DriveTokens[strings.ToLower(s.Email)] != "", "analysis": a.analysisSnapshot(), "local_ai": a.localAISnapshot(), "events": evs, "critical_events": a.criticalDashboardEvents(), "alerts": alerts, "total": total, "bins": bins, "blocks": blocks, "config": visibleConfig, "rules": a.state.Rules, "audit": visibleAudit, "last_seen": a.lastSeen, "device_presence": visiblePresence, "mail_status": a.mailStatus, "storage_error": a.storageError, "dropped": a.dropped, "feed_seen": a.feedSeen, "email": s.Email, "csrf": s.CSRF, "demo": a.demo, "local_account_ready": a.state.LocalAdmin.Hash != "", "google_ready": a.state.GoogleSettings != "" || secret("GOOGLE_CLIENT_ID") != "", "mail_ready": secret("GMAIL_APP_PASSWORD") != ""})
+		if a.groupLocked(s.Email) == groupAlerts {
+			critical := a.criticalDashboardEvents()
+			for _, e := range a.events {
+				e = a.classifiedEvent(e)
+				if e.Alert && e.Level < 12 {
+					critical = append(critical, e)
+				}
+			}
+			writeJSON(w, map[string]any{"version": productVersion(), "role": role, "group": groupAlerts, "events": critical, "critical_events": critical, "alerts": len(critical), "total": len(critical), "config": map[string]any{"devices": []Device{}, "auto_block": false}, "email": s.Email, "csrf": s.CSRF, "preferences": a.preferences(s.Email)})
+			return
+		}
+		writeJSON(w, map[string]any{"version": productVersion(), "role": role, "group": a.groupLocked(s.Email), "snmp_devices": snmpDevices, "event_clients": a.eventClientIndex(), "preferences": a.preferences(s.Email), "drive_connected": a.state.DriveTokens[strings.ToLower(s.Email)] != "", "analysis": a.analysisSnapshot(), "local_ai": a.localAISnapshot(), "events": evs, "critical_events": a.criticalDashboardEvents(), "alerts": alerts, "total": total, "bins": bins, "blocks": blocks, "config": visibleConfig, "rules": a.state.Rules, "audit": visibleAudit, "last_seen": a.lastSeen, "device_presence": visiblePresence, "mail_status": a.mailStatus, "storage_error": a.storageError, "dropped": a.dropped, "feed_seen": a.feedSeen, "email": s.Email, "csrf": s.CSRF, "demo": a.demo, "local_account_ready": a.state.LocalAdmin.Hash != "", "google_ready": a.state.GoogleSettings != "" || secret("GOOGLE_CLIENT_ID") != "", "mail_ready": secret("GMAIL_APP_PASSWORD") != ""})
 	}))
 	mux.HandleFunc("PUT /api/config", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		var c Config
@@ -1411,6 +1447,9 @@ func (a *App) routes() http.Handler {
 		s, _ := a.session(r)
 		a.mu.Lock()
 		defer a.mu.Unlock()
+		if a.groupLocked(s.Email) != groupSuperadmin {
+			c.AllowedEmails = append([]string{}, a.cfg.AllowedEmails...)
+		}
 		c.Listen = a.cfg.Listen
 		c.Syslog = a.cfg.Syslog
 		c.SNMP = a.cfg.SNMP
@@ -1739,8 +1778,16 @@ func main() {
 	replaceServer := flag.Bool("replace-server", false, "confirmar que o servidor original esta desligado")
 	fullSchedule := flag.String("full-backup-schedule", "", "agendar backup completo diario para uma conta Drive")
 	fullLocked := flag.Bool("full-locked", false, "trava interna do backup completo")
+	enableUpdate := flag.Bool("enable-app-update", false, "instalar serviço restrito de atualização como root")
 	enableReboot := flag.Bool("enable-server-reboot", false, "instalar política restrita de reinício como root")
 	flag.Parse()
+	if *enableUpdate {
+		if err := enableAppUpdate(); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("Atualização restrita instalada.")
+		return
+	}
 	if *enableReboot {
 		if err := enableServerReboot(); err != nil {
 			log.Fatal(err)

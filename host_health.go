@@ -10,6 +10,7 @@ import (
 )
 
 type SystemNotification struct {
+	Read     bool        `json:"read"`
 	Focus    *EventFocus `json:"focus,omitempty"`
 	ID       string      `json:"id"`
 	Time     time.Time   `json:"time"`
@@ -173,7 +174,16 @@ func (a *App) registerHostHealthRoutes(mux *http.ServeMux) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		health := a.hostHealth
-		_, unread := notificationView(a.state.Notifications, a.state.NotificationsCleared[strings.ToLower(session.Email)])
+		if a.groupLocked(session.Email) == groupAlerts {
+			health = HostHealth{Time: time.Now().UTC()}
+		}
+		all, _ := notificationView(a.state.Notifications, a.state.NotificationsCleared[strings.ToLower(session.Email)])
+		unread := 0
+		for _, n := range all {
+			if n.Time.After(a.state.NotificationsCleared[strings.ToLower(session.Email)]) && !a.state.NotificationReads[strings.ToLower(session.Email)][n.ID] {
+				unread++
+			}
+		}
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, map[string]any{"health": health, "unread": unread})
 	}))
@@ -182,7 +192,14 @@ func (a *App) registerHostHealthRoutes(mux *http.ServeMux) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		cleared := a.state.NotificationsCleared[strings.ToLower(session.Email)]
-		all, unread := notificationView(a.state.Notifications, cleared)
+		all, _ := notificationView(a.state.Notifications, cleared)
+		unread := 0
+		for i := range all {
+			all[i].Read = !all[i].Time.After(cleared) || a.state.NotificationReads[strings.ToLower(session.Email)][all[i].ID]
+			if !all[i].Read {
+				unread++
+			}
+		}
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, map[string]any{"notifications": all, "unread": unread, "cleared": cleared, "limit": 200})
 	}))

@@ -28,7 +28,9 @@ jobs:
           CGO_ENABLED: '0'
           GOTELEMETRY: 'off'
         run: |
-          for file in app dashboard device-network critical-controls host-health alert-sounds backup n8n assistant host-chart ssh collectors server-terminal; do node --check "web/$file.js"; done
+          for file in app dashboard device-network critical-controls host-health alert-sounds backup n8n assistant host-chart ssh collectors server-terminal accounts app-update desktop-link; do node --check "web/$file.js"; done
+          node scripts/test-app-update-policy.cjs
+          node scripts/test-critical-client-focus.cjs
           node scripts/test-n8n-workflow.cjs
           node scripts/test-reboot-policy.cjs
           node scripts/test-audio-permission.cjs
@@ -50,3 +52,47 @@ jobs:
         run: |
           version=$(python3 -c "import json; print(json.load(open('release/manifest-amd64.json'))['version'])")
           gh release create "v$version" --target "$GITHUB_SHA" --title "Multipla Siem $version" --notes-file RELEASE-NOTES.md --latest dist/multipla-siem-linux-amd64 dist/multipla-siem-linux-arm64 dist/multipla-update-linux-amd64 dist/multipla-update-linux-arm64 release/manifest-amd64.json release/manifest-amd64.sig release/manifest-arm64.json release/manifest-arm64.sig
+
+  windows-package:
+    needs: release
+    runs-on: windows-2025
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install verified SDK
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'dotnet-sdk.zip'
+          Invoke-WebRequest 'https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.402/dotnet-sdk-10.0.402-win-x64.zip' -OutFile $archive
+          $expected = 'ae4fd528cb7e9f6af6aaf7de36715a69f761f183744f1bb3025d19f5a92447090ec561410e46266c1d10a63781ed6f3de771760bc76c876d87daabc367b898cd'
+          if ((Get-FileHash $archive -Algorithm SHA512).Hash.ToLowerInvariant() -ne $expected) { throw 'SDK integrity failed' }
+          $sdk = Join-Path $env:RUNNER_TEMP 'multipla-dotnet'
+          Expand-Archive -LiteralPath $archive -DestinationPath $sdk
+          $sdk | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+      - name: Restore, audit, build and self-test
+        shell: pwsh
+        run: |
+          dotnet restore desktop/Multipla.Siem.Desktop.csproj --locked-mode -r win-x64
+          if ($LASTEXITCODE -ne 0) { throw 'Restore/audit failed' }
+          dotnet publish desktop/Multipla.Siem.Desktop.csproj -c Release -r win-x64 --self-contained true --no-restore -o app-package
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+          $app = Join-Path $PWD 'app-package/Multipla.Siem.exe'
+          $process = Start-Process -FilePath $app -ArgumentList '--self-test' -WindowStyle Hidden -PassThru -Wait
+          if ($process.ExitCode -ne 0 -or !(Test-Path app-package/self-test-result.txt)) { throw 'Self-test failed' }
+          Get-Content app-package/self-test-result.txt
+
+      - name: Publish Windows portable app
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          Copy-Item WINDOWS-APP.md app-package/LEIA-ME.md
+          Copy-Item desktop/packages.lock.json app-package/dependencies.lock.json
+          Compress-Archive -Path app-package/* -DestinationPath Multipla-SIEM-Windows-x64.zip
+          gh release upload "v$version" Multipla-SIEM-Windows-x64.zip --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Windows upload failed" }

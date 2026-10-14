@@ -1,0 +1,9 @@
+// Allow only starting this root-owned fixed updater unit. Never arbitrary units.
+polkit.addRule(function(action, subject) {
+    if (subject.user === "multipla-siem" &&
+        action.id === "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") === "multipla-app-update.service" &&
+        action.lookup("verb") === "start") {
+        return polkit.Result.YES;
+    }
+});
