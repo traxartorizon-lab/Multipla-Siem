@@ -12,5 +12,6 @@
     "No Authenticode publisher certificate",
     "External immutable storage deferred",
     "Production host provisioning must follow SECURITY-RUNBOOK.md"
-  ]
+  ],
+  "releaseVersionValidation": "Trim CR/LF and require semantic version before publishing"
 }

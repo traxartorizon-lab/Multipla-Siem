@@ -142,5 +142,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          version=$(cat VERSION)
+          version=$(tr -d '\r\n' < VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Invalid release version'; exit 1; }
           gh release create "v$version" --target "$GITHUB_SHA" --title "Multipla Siem $version" --notes-file RELEASE-NOTES.md --latest published/*
