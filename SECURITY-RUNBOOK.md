@@ -1,4 +1,4 @@
-# Operação e recuperação segura — Multipla SIEM 1.2.35
+# Operação e recuperação segura — Multipla SIEM 1.2.36
 
 Este documento descreve a política implementada e as etapas de infraestrutura que precisam ser executadas pelo administrador. Não contém chaves privadas, tokens, senhas nem valores reais de autenticação.
 

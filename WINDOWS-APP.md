@@ -73,3 +73,6 @@ Leia SECURITY-RUNBOOK.md para ativação restrita de isolamento, delegação SSH
 
 Padrão de publicação: o título e a bandeja exibem o nome Multipla SIEM seguido da versão compilada; o ZIP inclui a versão de VERSION em seu nome.
 
+
+MFA a partir de 1.2.36: no primeiro cadastro, escaneie o QR local do SIEM no Authy e confirme o código de seis dígitos. Recarregar a mesma sessão não troca a chave. Se a sessão expirar, volte ao login e faça novo cadastro. Contas já ativadas mantêm seu autenticador.
+

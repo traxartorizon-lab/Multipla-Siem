@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 type MFARecord struct {
@@ -22,7 +24,13 @@ type MFARecord struct {
 type MFAEnrollment struct {
 	Secret  string
 	Session string
+	Email   string
 	Expires time.Time
+	QR      []byte // Session-only image; never persisted or generated on repeated GETs.
+}
+
+func mfaURI(email, secret string) string {
+	return "otpauth://totp/" + url.PathEscape("Multipla SIEM:"+email) + "?secret=" + secret + "&issuer=Multipla%20SIEM&algorithm=SHA1&digits=6&period=30"
 }
 
 func (a *App) mfaRequired() bool {
@@ -141,7 +149,7 @@ func (a *App) registerMFARoutes(mux *http.ServeMux) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verificação MFA · Multipla SIEM</title><link rel="stylesheet" href="/mfa.css"><script src="/mfa.js" defer></script></head><body><main><h1>Proteja seu acesso</h1><p>Use seu aplicativo autenticador. O mesmo segundo fator é exigido nos acessos Google e locais.</p><p id="mfa-account"></p><section id="mfa-enrollment" hidden><h2>Configurar autenticador</h2><p>Adicione uma conta TOTP no seu autenticador: SHA-1, seis dígitos, intervalo de 30 segundos.</p><label>Chave de configuração<input id="mfa-secret" readonly autocomplete="off"></label><a id="mfa-uri">Abrir no autenticador deste dispositivo</a><p>Guarde o autenticador com segurança. Não envie esta chave em prints. A chave não permite entrar sem sua conta/senha.</p></section><form id="mfa-form"><label>Código de seis dígitos<input name="code" required pattern="[0-9]{6}" maxlength="6" inputmode="numeric" autocomplete="one-time-code"></label><button>Verificar e entrar</button></form><p id="mfa-status" role="status"></p></main></body></html>`))
+		w.Write([]byte(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verificação MFA · Multipla SIEM</title><link rel="stylesheet" href="/mfa.css"><script src="/mfa.js" defer></script></head><body><main><h1>Proteja seu acesso</h1><p>Use seu aplicativo autenticador. O mesmo segundo fator é exigido nos acessos Google e locais.</p><p id="mfa-account"></p><section id="mfa-enrollment" hidden><h2>Configurar autenticador</h2><p>No Authy, adicione uma conta e escaneie este QR code. Depois informe abaixo o código de seis dígitos exibido pelo aplicativo.</p><img id="mfa-qr" width="300" height="300" alt="QR code para cadastrar Multipla SIEM no autenticador"><p id="mfa-expiry"></p><details><summary>Não consigo escanear: usar chave manual</summary><p>TOTP: SHA-1, seis dígitos, intervalo de 30 segundos.</p><label>Chave de configuração<input id="mfa-secret" readonly autocomplete="off"></label><a id="mfa-uri">Abrir no autenticador deste dispositivo</a></details><p>Guarde o autenticador com segurança. Não envie esta chave em prints. A chave não permite entrar sem sua conta/senha.</p></section><form id="mfa-form"><label>Código de seis dígitos<input name="code" required pattern="[0-9]{6}" maxlength="12" inputmode="numeric" autocomplete="one-time-code"></label><button disabled>Verificar e entrar</button></form><p id="mfa-status" role="status"></p><a href="/">Voltar ao login</a></main></body></html>`))
 		_ = s
 	})
 	mux.HandleFunc("GET /auth/mfa/status", func(w http.ResponseWriter, r *http.Request) {
@@ -156,7 +164,11 @@ func (a *App) registerMFARoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("POST /auth/mfa/enroll", func(w http.ResponseWriter, r *http.Request) {
 		id, s, ok := a.mfaSession(r)
-		if !ok || r.Header.Get("Origin") != a.origin || !equal(r.Header.Get("X-CSRF-Token"), s.CSRF) {
+		if !ok {
+			http.Error(w, "Sessão de cadastro expirada. Volte ao login e entre novamente.", 401)
+			return
+		}
+		if r.Header.Get("Origin") != a.origin || !equal(r.Header.Get("X-CSRF-Token"), s.CSRF) {
 			http.Error(w, "Solicitação inválida", 403)
 			return
 		}
@@ -171,14 +183,12 @@ func (a *App) registerMFARoutes(mux *http.ServeMux) {
 			http.Error(w, "Criptografia MFA indisponível; administrador deve validar a chave de criptografia no servidor", 503)
 			return
 		}
-		raw := make([]byte, 20)
-		if _, err := rand.Read(raw); err != nil {
-			http.Error(w, "Falha de configuração", 503)
-			return
-		}
-		secret := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw)
 		if a.mfaEnrollments == nil {
 			a.mfaEnrollments = map[string]MFAEnrollment{}
+		}
+		if pending, exists := a.mfaEnrollments[id]; exists && pending.Email == email && time.Now().Before(pending.Expires) {
+			writeJSON(w, map[string]string{"secret": pending.Secret, "uri": mfaURI(email, pending.Secret), "qr": "/auth/mfa/qr.png", "expires_at": pending.Expires.Format(time.RFC3339)})
+			return
 		}
 		for owner, e := range a.mfaEnrollments {
 			if !time.Now().Before(e.Expires) {
@@ -189,12 +199,47 @@ func (a *App) registerMFARoutes(mux *http.ServeMux) {
 			http.Error(w, "Limite de configurações", 429)
 			return
 		}
-		a.mfaEnrollments[email] = MFAEnrollment{Secret: secret, Session: id, Expires: time.Now().Add(5 * time.Minute)}
-		writeJSON(w, map[string]string{"secret": secret, "uri": "otpauth://totp/" + url.PathEscape("Multipla SIEM:"+email) + "?secret=" + secret + "&issuer=Multipla%20SIEM&algorithm=SHA1&digits=6&period=30"})
+		raw := make([]byte, 20)
+		if _, err := rand.Read(raw); err != nil {
+			http.Error(w, "Falha de configuração", 503)
+			return
+		}
+		secret := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw)
+		pending := MFAEnrollment{Secret: secret, Session: id, Email: email, Expires: s.Created.Add(5 * time.Minute)}
+		pending.QR, _ = qrcode.Encode(mfaURI(email, secret), qrcode.Medium, -6)
+		a.mfaEnrollments[id] = pending
+		writeJSON(w, map[string]string{"secret": secret, "uri": mfaURI(email, secret), "qr": "/auth/mfa/qr.png", "expires_at": pending.Expires.Format(time.RFC3339)})
+	})
+	mux.HandleFunc("GET /auth/mfa/qr.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+		id, s, ok := a.mfaSession(r)
+		if !ok || r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+			http.Error(w, "Entre novamente", 403)
+			return
+		}
+		a.mu.Lock()
+		pending, exists := a.mfaEnrollments[id]
+		enrolled := a.state.MFA[strings.ToLower(s.Email)].EncryptedSecret != ""
+		a.mu.Unlock()
+		if enrolled || !exists || pending.Session != id || pending.Email != strings.ToLower(s.Email) || !time.Now().Before(pending.Expires) {
+			http.Error(w, "Configuração expirada; entre novamente", 409)
+			return
+		}
+		if len(pending.QR) == 0 {
+			http.Error(w, "QR indisponível; use a chave manual", 503)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pending.QR)
 	})
 	verify := func(w http.ResponseWriter, r *http.Request) {
 		id, s, ok := a.mfaSession(r)
-		if !ok || r.Header.Get("Origin") != a.origin || !equal(r.Header.Get("X-CSRF-Token"), s.CSRF) {
+		if !ok {
+			http.Error(w, "Sessão expirada. Volte ao login e entre novamente.", 401)
+			return
+		}
+		if r.Header.Get("Origin") != a.origin || !equal(r.Header.Get("X-CSRF-Token"), s.CSRF) {
 			http.Error(w, "Solicitação inválida", 403)
 			return
 		}
@@ -216,8 +261,8 @@ func (a *App) registerMFARoutes(mux *http.ServeMux) {
 		enrolling := record.EncryptedSecret == ""
 		var err error
 		if enrolling {
-			pending, exists := a.mfaEnrollments[email]
-			if !exists || pending.Session != id || !time.Now().Before(pending.Expires) {
+			pending, exists := a.mfaEnrollments[id]
+			if !exists || pending.Session != id || pending.Email != email || !time.Now().Before(pending.Expires) {
 				http.Error(w, "Configuração expirada; recarregue a página", 403)
 				return
 			}
@@ -249,7 +294,11 @@ func (a *App) registerMFARoutes(mux *http.ServeMux) {
 			http.Error(w, "Auditoria indisponível; acesso não liberado", 503)
 			return
 		}
-		delete(a.mfaEnrollments, email)
+		for enrollmentID, pending := range a.mfaEnrollments {
+			if pending.Email == email {
+				delete(a.mfaEnrollments, enrollmentID)
+			}
+		}
 		s.MFATime = time.Now().UTC()
 		a.sessions[id] = s
 		a.active[id] = time.Now()

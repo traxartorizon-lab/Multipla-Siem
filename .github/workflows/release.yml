@@ -34,6 +34,7 @@ jobs:
           node scripts/test-n8n-workflow.cjs
           node scripts/test-reboot-policy.cjs
           node scripts/test-audio-permission.cjs
+          node scripts/test-mfa-enrollment.cjs
           bash -n scripts/linux-collector-install.sh
           python3 scripts/test-linux-installer.py
           go test -mod=vendor ./...
