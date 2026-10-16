@@ -1,4 +1,19 @@
-# Multipla SIEM 1.2.37
+# Multipla SIEM 1.2.38
+
+## 1.2.38
+
+Dashboard com composição operacional: gráfico principal amplo, indicadores em
+faixas alinhadas, painéis carvão com bordas discretas e espaçamento uniforme.
+Layouts salvos com sobreposições ou dimensões sem espaço útil são adaptados
+com aviso; seleções de dispositivos são preservadas. Layouts manuais válidos
+continuam sendo respeitados.
+
+Movimentação e redimensionamento recusam colisões sem deslocar os vizinhos.
+O alinhamento opcional continua ocorrendo uma vez ao soltar, com desfazer.
+A apresentação cabe na largura disponível; conteúdo longo usa uma única
+rolagem vertical discreta dentro do card, sem barras horizontais por card.
+Alterações de métricas não reorganizam o layout. Salvar persiste por conta;
+cancelar preserva as preferências anteriores.
 
 ## 1.2.37
 

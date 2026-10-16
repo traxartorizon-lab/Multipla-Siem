@@ -6,7 +6,7 @@
     "component": {
       "type": "application",
       "name": "Multipla SIEM",
-      "version": "1.2.37"
+      "version": "1.2.38"
     }
   },
   "components": [

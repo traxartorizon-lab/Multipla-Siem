@@ -292,8 +292,79 @@ header{height:auto;min-height:76px;flex-wrap:wrap;padding-top:12px;padding-botto
 @keyframes isolation-flash{0%,100%{background:#7a1725;color:#fff;border-color:#ff6776}50%{background:#bf2940;color:#fff;border-color:#fff}}
 .isolation-pending{animation:isolation-flash 1s infinite}.isolation-pending:focus-visible{outline:3px solid #fff}@media(prefers-reduced-motion:reduce){.isolation-pending{animation:none;background:#7a1725;color:#fff}}
 
-/* Manual canvas: content growth scrolls inside a card, never moves its neighbors. */
-#overview .dashboard-grid.packed-dashboard>article{max-width:none;transition:none;overflow:auto;overscroll-behavior:contain}
-#overview .dashboard-grid.packed-dashboard>.panel{overflow:auto}
-#overview{overflow-x:auto}.dashboard-grid.organizing .dashboard-card-tools{position:sticky;top:0;z-index:2;background:var(--panel)}
+/* Operational canvas: quiet frames, consistent spacing and bounded geometry.
+   A card owns one vertical content viewport, not two native scroll containers. */
+html{scrollbar-gutter:stable}
+#overview{min-width:0;overflow-x:clip}
+#overview .dashboard-grid{width:100%;min-width:0;isolation:isolate}
+#overview .dashboard-grid>article{display:flex;flex-direction:column;padding:16px;border:1px solid #29333b;border-radius:6px;background:#121b23;box-shadow:none;outline:none;overflow:visible;color-scheme:dark;container-type:inline-size}
+#overview .dashboard-grid.packed-dashboard>article{max-width:100%;transition:none;overflow:visible;overscroll-behavior:auto}
+#overview .dashboard-grid.packed-dashboard>.panel{overflow:visible}
+#overview .dashboard-card-tools{flex:none;min-height:20px;margin:0 0 12px;padding:0;gap:8px;flex-wrap:nowrap;position:relative;background:transparent}
+#overview .dashboard-card-tools .eyebrow{color:#9caeb8;letter-spacing:1.1px;line-height:1.4}
+#overview .dashboard-card-content{flex:1;min-width:0;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#43525e transparent;overflow-wrap:anywhere;padding-right:3px}
+#overview .dashboard-card-content::-webkit-scrollbar{width:5px;height:0}
+#overview .dashboard-card-content::-webkit-scrollbar-thumb{background:#43525e;border-radius:4px}
+#overview .dashboard-card-content::-webkit-scrollbar-track{background:transparent}
+#overview .dashboard-card-content>span:not(.eyebrow){display:block;font-size:12px;color:var(--muted)}
+#overview .dashboard-card-content>strong{display:block;font-size:30px;line-height:1.2;letter-spacing:-.8px;margin:12px 0;color:#e8f0f3}
+#overview .dashboard-card-content>small{display:block;font-size:11px;line-height:1.5;color:var(--muted)}
+#overview .dashboard-card-content [hidden]{display:none!important}
+#overview [data-dashboard-card=devices] .device-status-counts{margin:3px 0!important;line-height:1.2}
+#overview [data-dashboard-card=devices] .device-status-counts strong{font-size:24px;line-height:1.2}
+#overview [data-dashboard-card=devices] #device-status-help{font-size:10px;line-height:1.35;margin-top:4px}
+#overview .dashboard-card-content svg,#overview .dashboard-card-content canvas{max-width:100%;box-sizing:border-box}
+#overview .dashboard-card-content .table-wrap{overflow-x:hidden}
+#overview .dashboard-card-content table{width:100%;min-width:0;table-layout:fixed}
+#overview .dashboard-card-content td,#overview .dashboard-card-content th{overflow-wrap:anywhere;white-space:normal}
+#overview .dashboard-card-content pre{white-space:pre-wrap;overflow-wrap:anywhere}
+#overview .dashboard-card-content .panel-heading{flex-wrap:wrap;gap:8px}
+#overview .dashboard-card-content .panel-heading>*{max-width:100%;min-width:0}
+#overview .dashboard-card-content .host-usage-container{min-width:0}
+#overview .dashboard-grid.organizing>article{outline:none;border-color:#40535f}
+#overview .dashboard-grid>article.resizing{border-color:var(--accent);box-shadow:0 0 0 1px #53dec133;z-index:3}
+#overview .dashboard-move-controls{gap:3px;flex-wrap:nowrap}
+#overview .dashboard-move-controls button{font-size:11px;padding:3px 6px;min-height:24px;border-radius:4px}
+#overview .dashboard-resize-right,#overview .dashboard-resize-bottom{opacity:0}
+#overview .dashboard-resize-right:focus-visible,#overview .dashboard-resize-bottom:focus-visible{opacity:1}
+#overview .dashboard-resize-corner{right:2px;bottom:2px;width:18px;height:18px;opacity:.6}
+#overview .dashboard-resize-corner:after{right:3px;bottom:3px;width:6px;height:6px;border-color:#7c929f}
+#overview .dashboard-toolbar{gap:8px;margin-bottom:14px}
+#overview .dashboard-toolbar button{padding:7px 10px;font-size:11px}
+#overview .dashboard-toolbar .check{font-size:11px;gap:6px}
+#overview .dashboard-toolbar [role=status]{min-height:16px;color:#8fa4b1}
+#overview .dashboard-toolbar [role=status]:empty{display:none}
+#overview .dashboard-grid>article:nth-child(n),#overview .dashboard-grid>[data-dashboard-card=resources]{border:1px solid #29333b}
+#overview .dashboard-grid>[data-dashboard-card=collection],#overview .dashboard-grid>[data-dashboard-card=alerts],#overview .dashboard-grid>[data-dashboard-card=devices],#overview .dashboard-grid>[data-dashboard-card=response]{padding:14px}
+#overview .dashboard-card-tools{margin-bottom:8px}
+#overview>.section-heading{margin-bottom:12px}
+#overview .dashboard-toolbar{margin-bottom:8px}
+#overview .dashboard-card-content>strong{font-size:27px;margin:8px 0}
+#overview [data-dashboard-card=activity] .panel-heading{align-items:center;flex-wrap:nowrap;margin:0 0 8px}
+#overview [data-dashboard-card=activity] .panel-heading h2{font-size:14px;margin:0 0 3px}
+#overview [data-dashboard-card=activity] .panel-heading p{font-size:10px;margin:0}
+#overview .activity-controls{display:flex;flex-wrap:nowrap;gap:8px;max-width:65%;justify-content:flex-end}
+#overview .activity-controls label{flex:0 1 125px;min-width:85px;font-size:9px}
+#overview .activity-controls .activity-filter{flex:0 1 190px;min-width:130px}
+#overview .activity-controls select{font-size:11px;padding:6px 8px;margin-top:3px}
+#overview .activity-legend{padding:0;margin:5px 0 8px;gap:8px 14px}
+#overview .dashboard-card-content .dashboard-visual-row{display:grid;grid-template-columns:minmax(0,1fr);gap:3px;align-items:start}
+#overview .dashboard-visual-row #chart{grid-column:1;grid-row:1;max-height:none;min-height:0;padding:0;margin:0}
+#overview .dashboard-visual-row .chart-axis{grid-column:1;grid-row:2;font-size:9px;margin:0}
+#overview .activity-chart svg{height:auto!important;width:100%;max-height:none;display:block}
+#overview .activity-values{font-size:10px;margin:0 0 3px;line-height:1.4}
+#overview .dashboard-visual-row #device-donut{grid-column:1;grid-row:3;display:grid;grid-template-columns:170px minmax(0,1fr);gap:2px 12px;align-items:center;border-top:1px solid #29333b;padding-top:9px;margin-top:6px}
+#overview #device-donut h3{font-size:11px;grid-column:1;margin:0}
+#overview #device-donut>p{font-size:9px;grid-column:1;margin:0}
+#overview #device-donut .donut-body{grid-column:2;grid-row:1/span 2;margin:0;gap:12px;flex-wrap:nowrap}
+#overview #device-donut .donut-body>svg{width:52px;flex-basis:52px}
+#overview #device-donut .donut-legend{display:flex;flex-wrap:wrap;gap:2px 18px}
+#overview #device-donut .donut-legend>div{border:0;min-width:170px;gap:6px;padding:4px 0;font-size:10px}
+#overview #device-donut .donut-legend b{margin-left:6px;font-size:10px}
+#overview #device-donut .donut-legend span{white-space:normal;overflow:visible;overflow-wrap:anywhere}
+@container(max-width:640px){#overview .dashboard-card-content .dashboard-visual-row{grid-template-columns:minmax(0,1fr)}#overview .dashboard-card-content .chart-axis{grid-column:1}}
+@container(max-width:640px){#overview [data-dashboard-card=activity] .panel-heading{flex-wrap:wrap}#overview .activity-controls{max-width:100%;width:100%}#overview .dashboard-visual-row #device-donut{grid-template-columns:1fr}#overview #device-donut .donut-body{grid-column:1;grid-row:3}#overview .activity-controls label{flex:1}}
+@container(max-width:480px){#overview .dashboard-card-content .resource-gauges{grid-template-columns:repeat(2,minmax(0,1fr))}#overview .dashboard-card-content .resource-network{flex-wrap:wrap;gap:12px}#overview .dashboard-card-content .donut-body{flex-wrap:wrap}#overview .dashboard-card-content .resource-gauge svg{width:72px}}
+@media(max-width:600px){#overview .dashboard-grid>article{padding:14px}#overview .dashboard-card-content{flex:auto;overflow:visible;padding:0}#overview .dashboard-grid.organizing .dashboard-card-tools{touch-action:auto}#overview .dashboard-move-controls{display:none}}
+@media(max-width:600px){#overview .dashboard-grid>[data-dashboard-card]{flex:0 0 100%!important;width:100%!important;max-width:100%;order:0}#overview .dashboard-grid>[data-dashboard-card=activity]{order:-1}#overview .dashboard-card-content .resource-gauges{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .account-dropdown{position:relative;display:inline-flex}.account-dropdown>.avatar{padding:0;cursor:pointer}.account-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:270px;max-width:calc(100vw - 24px);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px #0008;padding:8px;z-index:90}.account-menu[hidden],.account-settings-submenu[hidden]{display:none}.account-menu button{display:block;width:100%;text-align:left;padding:10px 12px;border-radius:5px}.account-menu button:focus-visible{outline:2px solid var(--accent)}.account-settings-submenu{padding-left:14px;border-left:2px solid var(--line);margin-left:10px}.problem-devices-dialog .problem-groups{max-height:65vh;overflow:auto}.problem-groups article{margin-top:12px}.problem-groups small{display:block}

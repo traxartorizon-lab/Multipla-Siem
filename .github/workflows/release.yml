@@ -35,6 +35,7 @@ jobs:
           node scripts/test-reboot-policy.cjs
           node scripts/test-audio-permission.cjs
           node .github/test-native-audio-bridge.cjs
+          node scripts/test-dashboard-geometry.cjs
           node scripts/test-mfa-enrollment.cjs
           bash -n scripts/linux-collector-install.sh
           python3 scripts/test-linux-installer.py

@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "product": "Multipla SIEM",
-  "version": "1.2.37",
+  "version": "1.2.38",
   "repository": "https://github.com/traxartorizon-lab/Multipla-Siem",
   "go": "1.27.2",
   "dotnet": "10.0.402",
   "offlineSigning": "Ed25519",
   "privateKeyInCI": false,
-  "reviewedSourceReceiptSha256": "da646ddb5269e391611ecc8d7567a576fcd28faf3fab7101c89abc5034fb38c4",
+  "reviewedSourceReceiptSha256": "73f4f87a3478bb7f189542fd3b1611c0349ae56a45fc3b26ea8b54d2cf82ae95",
   "provenance": "GitHub build attestations attach the publishing commit and artifact hashes",
   "limits": [
     "No Authenticode publisher certificate",

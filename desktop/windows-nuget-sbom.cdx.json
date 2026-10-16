@@ -108,15 +108,15 @@
         "pkg:nuget/NAudio.Core@2.2.1",
         "pkg:nuget/NAudio.Wasapi@2.2.1"
       ],
-      "ref": "Multipla-SIEM-Windows@1.2.37"
+      "ref": "Multipla-SIEM-Windows@1.2.38"
     }
   ],
   "metadata": {
     "component": {
-      "bom-ref": "Multipla-SIEM-Windows@1.2.37",
+      "bom-ref": "Multipla-SIEM-Windows@1.2.38",
       "name": "Multipla SIEM Windows",
       "type": "application",
-      "version": "1.2.37"
+      "version": "1.2.38"
     },
     "properties": [
       {
