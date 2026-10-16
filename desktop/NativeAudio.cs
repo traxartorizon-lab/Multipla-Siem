@@ -38,13 +38,14 @@ internal partial class PanelWindow
         if(origin==null||!SecurityPolicy.SameOrigin(origin,e.Source)||!SecurityPolicy.SameOrigin(origin,browser.Source?.AbsoluteUri??""))return;
         // Permit ordinary outputs→select→configure→test bursts; the former
         // blanket 150ms gate silently discarded legitimate successive actions.
-        if(!audioRequestBudget.Allow(DateTimeOffset.UtcNow))return;
         try
         {
             var raw=e.WebMessageAsJson;if(raw.Length>4096)return;
             using var message=JsonDocument.Parse(raw);var root=message.RootElement;
             if(!root.TryGetProperty("type",out var type)||type.GetString()!="multipla.audio.request")return;
             var action=root.GetProperty("action").GetString();
+            var mute=action=="stop"||(action=="configure"&&root.TryGetProperty("enabled",out var enabledValue)&&enabledValue.ValueKind==JsonValueKind.False);
+            if(!audioRequestBudget.Allow(DateTimeOffset.UtcNow)&&!mute)return;
             switch(action)
             {
                 case "outputs":SendAudioState();return;
@@ -65,12 +66,12 @@ internal partial class PanelWindow
                 case "configure":
                     var volume=root.GetProperty("volume").GetInt32();var sound=root.GetProperty("sound").GetString();var enabled=root.GetProperty("enabled").GetBoolean();
                     if(volume<0||volume>100||sound is not ("beep" or "siren"))return;
-                    settings=settings with{Volume=volume,SoundType=sound,Sound=enabled};SavePreferences(settings);if(!enabled&&!notifications.Any(n=>n.Continuous&&!n.Read))StopSound();SendAudioState();return;
+                    settings=settings with{Volume=volume,SoundType=sound,Sound=enabled};if(!enabled){notificationAudioPlan.Reset();StopSound();}SavePreferences(settings);ReconcileNotificationAudio();SendAudioState();return;
                 case "test":
                     settings=settings with{Sound=true};SavePreferences(settings);
-                    StopSound();StartSound();await Task.Delay(4000,lifetime.Token);if(!notifications.Any(n=>n.Continuous&&!n.Read))StopSound();SendAudioState();return;
+                    notificationAudioPlan.Preview(settings.SoundType,DateTimeOffset.UtcNow);ReconcileNotificationAudio();await Task.Delay(4000,lifetime.Token);ReconcileNotificationAudio();SendAudioState();return;
                 case "stop":
-                    if(!notifications.Any(n=>n.Continuous&&!n.Read))StopSound();SendAudioState();return;
+                    MuteNativeAudio();SendAudioState();return;
             }
         }
         catch(OperationCanceledException){}

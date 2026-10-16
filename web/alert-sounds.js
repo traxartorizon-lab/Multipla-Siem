@@ -3,7 +3,7 @@
 // back to microphone permissions if the optional injected marker is absent.
 const isNativeAudioHost=()=>window===window.top&&!!window.chrome?.webview;
 const alertSoundFiles={beep:'/audio/alert-beep.ogg',siren:'/audio/alert-siren.ogg'};
-let alertSoundAccount='',alertSoundSettings={enabled:false,sound:'beep',volume:40},alertSoundSeen=new Set(),alertSoundPrimed=false,alertSoundReady=false,alertSoundPlayer=null,alertSoundStopTimer;
+let alertSoundAccount='',alertSoundSettings={enabled:false,sound:'beep',volume:40},alertSoundSeen=new Set(),alertSoundPrimed=false,alertSoundReady=false,alertSoundPlayer=null,alertSoundStopTimer,alertSoundEpoch=0,alertSoundEventIDs=[];
 function alertSoundStatus(message){$('#alert-sound-status').textContent=message;if(typeof syncEventSoundButton==='function')syncEventSoundButton()}
 function saveAlertSoundSettings(){try{localStorage.setItem('multipla.alert-sound.'+alertSoundAccount,JSON.stringify(alertSoundSettings))}catch{alertSoundStatus('Não foi possível salvar a preferência neste navegador.')}}
 function syncAlertSoundSettings(account){
@@ -13,29 +13,36 @@ function syncAlertSoundSettings(account){
  $('#alert-sound-enabled').checked=alertSoundSettings.enabled;$('#alert-sound-choice').value=alertSoundSettings.sound;$('#alert-sound-volume').value=alertSoundSettings.volume;
  alertSoundStatus(alertSoundSettings.enabled?'Clique em Testar e habilitar áudio para permitir a reprodução nesta sessão.':'Alerta sonoro desativado.');
 }
-function stopAlertSound(){clearTimeout(alertSoundStopTimer);if(alertSoundPlayer){alertSoundPlayer.pause();alertSoundPlayer.currentTime=0;alertSoundPlayer=null}}
-async function playAlertSound(sound=alertSoundSettings.sound){
+function stopEventSound(){alertSoundEpoch++;clearTimeout(alertSoundStopTimer);alertSoundEventIDs=[];if(alertSoundPlayer){alertSoundPlayer.pause();alertSoundPlayer.currentTime=0;alertSoundPlayer=null}}
+function stopAlertSound(){stopEventSound();if(typeof stopIsolationSound==='function')stopIsolationSound()}
+function eventSoundEnabled(event){return event.classification?.critical!==false&&event.review?.status!=='false_positive'&&(event.classification?.sound===true||event.detector==='ssh-login-burst'&&event.classification?.sound!==false)}
+function setAlertSoundEnabled(enabled){alertSoundSettings.enabled=enabled;$('#alert-sound-enabled').checked=enabled;saveAlertSoundSettings();if(!enabled){stopAlertSound();alertSoundStatus('Áudio desativado. As notificações e configurações individuais foram preservadas.')}else playAlertSound()}
+
+function previewAlertSound(sound=alertSoundSettings.sound){if(Object.hasOwn(alertSoundFiles,sound))$('#alert-sound-choice').value=sound;if(isNativeAudioHost()){const input=$('#alert-sound-enabled');input.checked=true;input.dispatchEvent(new Event('change'));$('#alert-sound-test').click();return}alertSoundSettings.sound=$('#alert-sound-choice').value;setAlertSoundEnabled(true)}
+
+async function playAlertSound(sound=alertSoundSettings.sound,eventIDs=[]){
  if(isNativeAudioHost()){alertSoundStatus("No app, o áudio usa a saída do Windows configurada acima.");return;}
- stopAlertSound();const player=new Audio(alertSoundFiles[sound]);alertSoundPlayer=player;player.volume=alertSoundSettings.volume/100;
- try{if(alertOutputDevice){if(typeof player.setSinkId!=='function')throw new Error('Saída não suportada');await player.setSinkId(alertOutputDevice)}if(alertSoundPlayer!==player)return;await player.play();alertSoundReady=true;alertSoundStatus('Áudio disponível nesta sessão.');alertSoundStopTimer=setTimeout(()=>{if(alertSoundPlayer===player)stopAlertSound()},4000)}catch{alertSoundReady=false;alertSoundStatus(alertOutputDevice?'Não foi possível usar a saída selecionada. Selecione novamente a saída de áudio.':'Reprodução bloqueada ou indisponível. Clique em Testar e habilitar áudio.')}
+ if(!alertSoundSettings.enabled)return;stopEventSound();const epoch=alertSoundEpoch,player=new Audio(alertSoundFiles[sound]||alertSoundFiles.beep);alertSoundPlayer=player;alertSoundEventIDs=eventIDs;player.volume=alertSoundSettings.volume/100;
+ try{if(alertOutputDevice){if(typeof player.setSinkId!=='function')throw new Error('Saída não suportada');await player.setSinkId(alertOutputDevice)}if(alertSoundPlayer!==player||!alertSoundSettings.enabled||epoch!==alertSoundEpoch)return;await player.play();if(alertSoundPlayer!==player||!alertSoundSettings.enabled||epoch!==alertSoundEpoch){player.pause();return}alertSoundReady=true;alertSoundStatus('Áudio disponível nesta sessão.');alertSoundStopTimer=setTimeout(()=>{if(alertSoundPlayer===player)stopEventSound()},4000)}catch{if(epoch!==alertSoundEpoch){player.pause();return}alertSoundReady=false;alertSoundStatus(alertOutputDevice?'Não foi possível usar a saída selecionada. Selecione novamente a saída de áudio.':'Reprodução bloqueada ou indisponível. Clique em Testar e habilitar áudio.')}
 }
 function observeCriticalSounds(s){
  if(isNativeAudioHost())return;
- syncAlertSoundSettings(s.email);observeInvasionAlerts(s);let found=false,chosenSound=alertSoundSettings.sound;const now=Date.now();
+ syncAlertSoundSettings(s.email);const active=[...(s.events||[]),...(s.critical_events||[])];if(alertSoundEventIDs.length&&!active.some(e=>alertSoundEventIDs.includes(e.id)&&eventSoundEnabled(e)))stopEventSound();observeInvasionAlerts(s);let found=false,chosenSound=alertSoundSettings.sound;const now=Date.now();
  for(const event of [...(s.events||[]),...(s.critical_events||[])]){const critical=event.classification?.critical!==false&&event.review?.status!=='false_positive'&&(Number(event.review?.level||event.level)>=12||!!event.diagnosis);if(!critical||!event.id||event.detector==='ssh-login-burst')continue;
-  if(!alertSoundSeen.has(event.id)){alertSoundSeen.add(event.id);if(alertSoundPrimed&&Date.parse(event.time)>=now-120000&&event.classification?.sound!==false){found=true;chosenSound=event.classification?.sound_type||alertSoundSettings.sound}}
+  if(!alertSoundSeen.has(event.id)){alertSoundSeen.add(event.id);if(alertSoundPrimed&&Date.parse(event.time)>=now-120000&&event.classification?.sound===true){found=true;chosenSound=event.classification?.sound_type||alertSoundSettings.sound}}
  }
  alertSoundPrimed=true;if(alertSoundSeen.size>4000)alertSoundSeen=new Set([...alertSoundSeen].slice(-2000));
  if(!found||!alertSoundSettings.enabled)return;if(!alertSoundReady){alertSoundStatus('Novo evento crítico. Habilite o áudio pelo botão de teste.');return}
  try{const key='multipla.alert-sound.last.'+s.email,last=Number(localStorage.getItem(key)||0);if(now-last<10000)return;localStorage.setItem(key,String(now))}catch{}
- playAlertSound(chosenSound);
+ playAlertSound(chosenSound,active.filter(eventSoundEnabled).map(e=>e.id));
 }
-$('#alert-sound-enabled').onchange=event=>{alertSoundSettings.enabled=event.target.checked;saveAlertSoundSettings();if(event.target.checked)playAlertSound();else{stopAlertSound();alertSoundStatus('Alerta sonoro desativado.')}};
+$('#alert-sound-enabled').onchange=event=>setAlertSoundEnabled(event.target.checked);
 $('#alert-sound-choice').onchange=event=>{alertSoundSettings.sound=event.target.value;saveAlertSoundSettings()};
 $('#alert-sound-volume').oninput=event=>{alertSoundSettings.volume=Number(event.target.value);saveAlertSoundSettings()};
-$('#alert-sound-test').onclick=()=>playAlertSound();
-$('#alert-sound-stop').onclick=()=>stopAlertSound();
+$('#alert-sound-test').onclick=()=>setAlertSoundEnabled(true);
+$('#alert-sound-stop').onclick=()=>setAlertSoundEnabled(false);
 window.addEventListener('pagehide',stopAlertSound);
+window.addEventListener('storage',event=>{if(isNativeAudioHost()||event.key!=='multipla.alert-sound.'+alertSoundAccount)return;try{const value=JSON.parse(event.newValue||'null');if(value?.enabled===false){alertSoundSettings.enabled=false;$('#alert-sound-enabled').checked=false;stopAlertSound();alertSoundStatus('Áudio desativado em outra aba desta conta.')}}catch{}});
 
 // Audio hardware belongs to this browser/computer, never to the SIEM server.
 let alertOutputDevice='';
@@ -75,8 +82,8 @@ function showInvasionAlert(event){
  popup.setAttribute('role','alertdialog');popup.setAttribute('aria-modal','false');popup.setAttribute('aria-label','POSSIVEL TENTATIVA DE INVASAO');
  popup.append(el('div','ALERTA GLOBAL · SSH','invasion-eyebrow'),heading,el('p','Detectadas 10 falhas de autenticação do mesmo IP em menos de 1 minuto.'),el('strong','IP de origem: '+(event.source_ip||'—')),el('p','Último dispositivo: '+event.device+' · '+date(event.time)),el('small','Tentativas repetidas não comprovam invasão. Investigue os registros e acessos bem-sucedidos relacionados.'));
  const status=el('p',undefined,'invasion-audio-status'),view=el('button','Ver eventos'),stop=el('button','Parar sirene','secondary'),enable=el('button','Habilitar sirene','secondary'),close=el('button','Fechar aviso','secondary');
- view.onclick=()=>{openEventFocus(event.id);popup.remove();invasionPopup=null;stopAlertSound()};stop.onclick=()=>{stopAlertSound();status.textContent='Sirene interrompida.'};close.onclick=()=>{popup.remove();invasionPopup=null;stopAlertSound()};
- enable.onclick=async()=>{alertSoundSettings.enabled=true;$('#alert-sound-enabled').checked=true;saveAlertSoundSettings();await playAlertSound('siren');status.textContent=alertSoundReady?'Sirene habilitada.':'O navegador bloqueou o áudio; confira as permissões.'};
+ view.onclick=()=>{openEventFocus(event.id);popup.remove();invasionPopup=null;stopAlertSound()};stop.onclick=()=>{setAlertSoundEnabled(false);status.textContent='Áudio desativado. Notificação preservada.'};close.onclick=()=>{popup.remove();invasionPopup=null;stopAlertSound()};
+ enable.onclick=async()=>{previewAlertSound('siren');status.textContent=alertSoundReady?'Sirene habilitada.':'O navegador bloqueou o áudio; confira as permissões.'};
  buttons.append(view,stop,enable,close);popup.append(status,buttons);document.body.append(popup);
- if(event.classification?.sound!==false&&alertSoundSettings.enabled&&alertSoundReady){playAlertSound(event.classification?.sound_type||'siren');status.textContent='Sirene de alerta acionada.'}else status.textContent='Para ouvir a sirene, habilite o áudio neste navegador.';
+ if(event.classification?.sound!==false&&alertSoundSettings.enabled&&alertSoundReady){playAlertSound(event.classification?.sound_type||'siren',[event.id]);status.textContent='Sirene de alerta acionada.'}else status.textContent='Para ouvir a sirene, habilite o áudio neste navegador.';
 }

@@ -16,4 +16,13 @@ const manual={a:{x:0,y:0,pixel_width:220,height:190},b:{x:240,y:0,pixel_width:22
 valid(g.fit(Object.fromEntries(order.map(id=>[id,{x:0,y:48000,pixel_width:8000,height:2400}])),order,601),601);
 assert(!g.valid('a',{...manual.a,x:30},manual,900),'drag collision allowed');assert(!g.valid('a',{...manual.a,pixel_width:250},manual,900),'resize collision allowed');assert(g.valid('a',{...manual.a,y:210},manual,900));cases+=3;
 let seed=817;for(let n=0;n<200;n++){const random=()=>((seed=(seed*1664525+1013904223)>>>0)/2**32);const width=601+Math.floor(random()*1200);const settings=Object.fromEntries(order.map(id=>[id,{x:Math.floor(random()*4000),y:Math.floor(random()*1000),pixel_width:120+Math.floor(random()*6000),height:120+Math.floor(random()*600)}]));valid(g.fit(settings,order,width),width)}
+for(const width of [768,1024,1366,1704]){
+ const layout=g.fit(sandbox.defaults(width),order,width),before=JSON.stringify(layout);
+ const target={...layout.collection,x:Math.min(250,width-layout.collection.pixel_width),y:layout.alerts.y};
+ const settled=g.drop('collection',target,layout,order,width);assert(settled,'drop rejected available space');valid(settled,width);
+ assert.equal(settled.collection.x,target.x);assert.equal(settled.collection.y,target.y);assert.equal(JSON.stringify(layout),before,'drop mutated pre-gesture undo state');
+ const distant=g.drop('collection',{...layout.collection,y:3000},layout,order,width);valid(distant,width);
+ for(const id of order.filter(id=>id!=='collection'))assert.equal(JSON.stringify(distant[id]),JSON.stringify(layout[id]),'unrelated card moved during free-space drop');
+ cases+=4;
+}
 console.log('PASS '+cases+' dashboard geometry checks: collision, bounded viewport, useful minima, legacy repair and stable fit.');

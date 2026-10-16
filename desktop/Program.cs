@@ -90,7 +90,11 @@ internal record Notification(
     [property: JsonPropertyName("detail")] string Detail,
     [property: JsonPropertyName("severity")] string Severity,
     [property: JsonPropertyName("read")] bool Read,
- [property: JsonPropertyName("continuous")] bool Continuous = false);
+ [property: JsonPropertyName("continuous")] bool Continuous = false,
+ [property: JsonPropertyName("sound")] bool Sound = false,
+ [property: JsonPropertyName("sound_type")] string SoundType = "",
+ [property: JsonPropertyName("event_id")] string EventId = "",
+ [property: JsonPropertyName("isolation_ip")] string IsolationIP = "");
 internal record NotificationResponse([property: JsonPropertyName("notifications")] Notification[] Notifications);
 
 internal partial class PanelWindow : Form
@@ -123,8 +127,10 @@ internal partial class PanelWindow : Form
 
     readonly Action<Preferences> persistPreferences;
     void SavePreferences(Preferences value)=>persistPreferences(value);
-    public PanelWindow(bool startHidden, bool isolatedTest=false, Action<Preferences>? testStore=null,DesktopUpdateUiFixture? updateFixture=null)
+    public PanelWindow(bool startHidden, bool isolatedTest=false, Action<Preferences>? testStore=null,DesktopUpdateUiFixture? updateFixture=null,Action<string?>? testAudio=null)
     {
+        if(testAudio!=null&&!isolatedTest)throw new InvalidOperationException("Audio fixture requires isolated mode.");audioFixture=testAudio;
+        notificationAudioTimer.Tick+=(_,_)=>ReconcileNotificationAudio();
         persistPreferences=isolatedTest?(testStore??(_=>{})):SecureStore.Save;
         tray.Visible=!isolatedTest;
         isolationBlink.Tick+=(_,_)=>{state.BackColor=state.BackColor==Color.Red?SystemColors.Control:Color.Red;state.ForeColor=state.BackColor==Color.Red?Color.White:SystemColors.ControlText;};
@@ -154,7 +160,7 @@ internal partial class PanelWindow : Form
         tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => OpenPanel(); tray.BalloonTipClicked += (_, _) => ShowNotifications();
         if(!isolatedTest) FormClosing += (_, eventArgs) => { if (!exiting && eventArgs.CloseReason == CloseReason.UserClosing) { eventArgs.Cancel = true; Hide(); } };
         timer.Tick += async (_, _) => await Poll();
-        if(!isolatedTest) Shown += async (_, _) => { if (startHidden) Hide(); await LoadPanel(); timer.Start(); };
+        if(!isolatedTest) Shown += async (_, _) => { if (startHidden) Hide(); await LoadPanel(); timer.Start(); notificationAudioTimer.Start(); };
     }
     internal bool ValidateIsolatedBranding()=>Text==Branding.AppName&&Icon?.Handle==Branding.AppIcon.Handle&&tray.Icon?.Handle==Branding.AppIcon.Handle&&tray.Text==Branding.AppName&&!tray.Visible&&settings.Origin==""&&settings.Key=="";
     static bool StartupEnabled() { using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"); return key?.GetValue("MultiplaSIEM") is string; }
@@ -215,7 +221,7 @@ internal partial class PanelWindow : Form
         var url = new TextBox { Text = settings.Origin, Width = 550 };
         var key = new TextBox { Text = settings.Key, Width = 550, UseSystemPasswordChar = true, MaxLength = 43 };
         var devices = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 550 };
-        var sound = new CheckBox { Text = "Tocar sirene para notificações críticas pendentes", Checked = settings.Sound, AutoSize = true };
+        var sound = new CheckBox { Text = "Áudio dos alertas autorizados e de isolamento (avisos operacionais apenas visuais)", Checked = settings.Sound, AutoSize = true };
         var outputs = new List<(string Id, string Name)> { ("", "Padrão do Windows") };
         try { using var enumerator = new MMDeviceEnumerator(); foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)) { outputs.Add((device.ID, device.FriendlyName)); device.Dispose(); } } catch { }
         devices.Items.AddRange(outputs.Select(x => x.Name).Cast<object>().ToArray()); devices.SelectedIndex = Math.Max(0, outputs.FindIndex(x => x.Id == settings.AudioDevice));
@@ -229,7 +235,7 @@ internal partial class PanelWindow : Form
             if (key.Text.Length != 0 && (key.Text.Length != 43 || key.Text.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '_' && c != '-'))) throw new ArgumentException("Chave de vínculo inválida.");
             if (settings.Origin != "" && settings.Origin != uri.AbsoluteUri && initialized) throw new ArgumentException("Para trocar de servidor, saia e abra novamente o app. A sessão do painel não será transferida.");
             settings = new Preferences(uri.AbsoluteUri, key.Text, outputs[devices.SelectedIndex].Id, sound.Checked, settings.Volume, settings.SoundType);
-            SavePreferences(settings); StopSound(); seen.Clear(); failures = 0; nextPoll = default;
+            SavePreferences(settings); StopSound(); notifications=[];notificationAudioPlan.Reset();notificationAudioPrimed=false;seen.Clear(); failures = 0; nextPoll = default;
             await LoadPanel(); await Poll();
         }
         catch (ArgumentException ex) { MessageBox.Show(this, ex.Message); }
@@ -253,7 +259,7 @@ internal partial class PanelWindow : Form
             using var request = Request(HttpMethod.Get, "api/desktop/notifications");
             using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, lifetime.Token);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound || response.Content.Headers.ContentType?.MediaType != "application/json" && response.IsSuccessStatusCode)
-            { StopSound(); SetNotificationStatus("Painel disponível · servidor precisa de atualização para notificações do app."); nextPoll = DateTimeOffset.UtcNow.AddSeconds(60); return; }
+            { StopSound(); notifications=[];notificationAudioPlan.Reset();SetNotificationStatus("Painel disponível · servidor precisa de atualização para notificações do app."); nextPoll = DateTimeOffset.UtcNow.AddSeconds(60); return; }
             if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
             { StopSound(); notifications=[]; SetNotificationStatus("Chave de notificações inválida, expirada ou revogada. Gere a chave na Central de notificações; a chave do console não serve para vincular o app."); nextPoll = DateTimeOffset.MaxValue; return; }
             response.EnsureSuccessStatusCode();
@@ -271,8 +277,7 @@ internal partial class PanelWindow : Form
                 var detail = fresh.Length > 1 ? fresh.Length + " novas notificações. " + n.Detail : n.Detail;
                 tray.ShowBalloonTip(5000, n.Title.Length > 63 ? n.Title[..63] : n.Title, detail.Length > 255 ? detail[..255] : detail, fresh.Any(x => x.Severity == "critical") ? ToolTipIcon.Warning : ToolTipIcon.Info);
             }
-            var urgent=notifications.Any(n=>!n.Read&&n.Continuous);if(urgent)isolationBlink.Start();else{isolationBlink.Stop();state.BackColor=SystemColors.Control;state.ForeColor=SystemColors.ControlText;}
- if (urgent || settings.Sound && notifications.Any(n => !n.Read && n.Severity == "critical")) StartSound(); else StopSound();
+            ReconcileNotificationAudio(notificationAudioPrimed?fresh:[]);notificationAudioPrimed=true;
             failures = 0; nextPoll = default; SetNotificationStatus("Notificações sincronizadas · " + notifications.Count(n => !n.Read) + " pendentes · atualizado " + DateTime.Now.ToString("HH:mm:ss"));
         }
         catch (OperationCanceledException) when (exiting) { }
@@ -325,21 +330,25 @@ internal partial class PanelWindow : Form
         catch{state.Text="Falha ao abrir o navegador ou processar o login Google. Verifique o navegador padrão e tente novamente.";}
         finally{verifier="";googleLoginBusy=false;pendingGoogleLogin=null;}
     }
-    void StartSound()
+    void StartSound(string? selected=null)
     {
-        if (audio != null) return;
+        if(!settings.Sound)return;
+        selected=selected??settings.SoundType;
+        if(playingSound==selected&&playingVolume==settings.Volume&&(audioFixture!=null||audio!=null))return;
+        StopSound();playingSound=selected;playingVolume=settings.Volume;
+        if(audioFixture!=null){audioFixture(selected);return;}
         try
         {
             using var enumerator = new MMDeviceEnumerator();
             outputDevice = settings.AudioDevice == "" ? enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia) : enumerator.GetDevice(settings.AudioDevice);
             if (outputDevice.State != DeviceState.Active) throw new InvalidOperationException();
             audio = new WasapiOut(outputDevice, AudioClientShareMode.Shared, true, 100);
-            var beep=settings.SoundType=="beep" && !notifications.Any(n=>!n.Read && n.Continuous);
+            var beep=selected=="beep";
             audio.Init(new SignalGenerator(44100, 1) { Gain = Math.Clamp(settings.Volume,0,100)/100.0*0.35, Frequency = beep?880:550, FrequencyEnd = 1100, SweepLengthSecs = 1, Type = beep?SignalGeneratorType.Sin:SignalGeneratorType.Sweep }); audio.Play();
         }
         catch { StopSound(); state.Text = "Saída de áudio indisponível. Selecione novamente; não houve troca automática para o headphone."; }
     }
-    void StopSound() { audio?.Stop(); audio?.Dispose(); audio = null; outputDevice?.Dispose(); outputDevice = null; }
+    void StopSound() { if(playingSound!=null)audioFixture?.Invoke(null);playingSound=null;audio?.Stop(); audio?.Dispose(); audio = null; outputDevice?.Dispose(); outputDevice = null; }
     void SetNotificationStatus(string message)
     {
         notificationStatus=message;
@@ -399,7 +408,7 @@ internal partial class PanelWindow : Form
     bool resourcesDisposed;
     protected override void Dispose(bool disposing)
     {
-        if (disposing && !resourcesDisposed) { resourcesDisposed=true; lifetime.Cancel(); pendingGoogleLogin?.Cancel(); notificationWindow?.Close(); googleProof?.Dispose(); timer.Dispose(); updateTimer.Dispose(); isolationBlink.Dispose(); tray.Visible = false; tray.Dispose(); StopSound(); http.Dispose(); browser.Dispose(); lifetime.Dispose(); }
+        if (disposing && !resourcesDisposed) { resourcesDisposed=true; lifetime.Cancel(); pendingGoogleLogin?.Cancel(); notificationWindow?.Close(); googleProof?.Dispose(); timer.Dispose(); updateTimer.Dispose(); notificationAudioTimer.Dispose(); isolationBlink.Dispose(); tray.Visible = false; tray.Dispose(); StopSound(); http.Dispose(); browser.Dispose(); lifetime.Dispose(); }
         base.Dispose(disposing);
         // Profile is ephemeral; remove only this generated subdirectory, never a shared browser profile.
         try { if (Directory.Exists(profile)) Directory.Delete(profile, true); } catch { }
@@ -411,6 +420,7 @@ internal static class SelfTest
  static string AssemblyVersion()=>System.Reflection.Assembly.GetExecutingAssembly().GetName().Version!.ToString(3);
     public static void Run()
     {
+        NotificationAudioSelfTest.Run();
         var origin = SecurityPolicy.Origin("https://siem.example:8443");
         if (!SecurityPolicy.SameOrigin(origin, "https://siem.example:8443/api") || SecurityPolicy.SameOrigin(origin, "https://siem.example.evil:8443") || SecurityPolicy.SameOrigin(origin, "http://siem.example:8443")) throw new Exception("Origin policy failed");
         foreach (var invalid in new[] { "http://localhost", "https://user@siem.example", "https://siem.example/path", "https://siem.example/?key=secret" })

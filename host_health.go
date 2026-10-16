@@ -10,6 +10,8 @@ import (
 )
 
 type SystemNotification struct {
+	Sound       bool        `json:"sound"`
+	SoundType   string      `json:"sound_type,omitempty"`
 	Continuous  bool        `json:"continuous,omitempty"`
 	IsolationIP string      `json:"isolation_ip,omitempty"`
 	Tenant      string      `json:"tenant,omitempty"`
@@ -22,6 +24,34 @@ type SystemNotification struct {
 	Severity    string      `json:"severity"`
 	EventID     string      `json:"event_id,omitempty"`
 }
+
+// Recompute the audible view from current server policy. Severity is visual;
+// operational critical warnings are not an implicit authorization to sound.
+// Call under a.mu, without changing stored evidence or read status.
+func (a *App) notificationAudio(n SystemNotification) SystemNotification {
+	n.Sound, n.SoundType = false, ""
+	direct := n.EventID != "" && n.IsolationIP != "" && n.Focus != nil && n.Focus.Detector == "direct-siem-isolation"
+	n.Continuous = direct
+	if direct {
+		n.Sound, n.SoundType = true, "siren"
+		return n
+	}
+	if review, ok := a.state.AlertReviews[n.EventID]; ok && review.Status == "false_positive" {
+		return n
+	}
+	if n.EventID == "" || n.Focus == nil {
+		return n
+	}
+	if policy, ok := a.state.CriticalPatterns[n.Focus.Pattern]; ok {
+		n.Sound = policy.Critical && policy.Sound
+		n.SoundType = policy.SoundType
+	} else if n.Focus.Detector == "ssh-login-burst" {
+		// Existing explicit automatic invasion policy, distinct from capacity.
+		n.Sound, n.SoundType = true, "siren"
+	}
+	return n
+}
+
 type HostThread struct {
 	PID      int     `json:"pid"`
 	TID      int     `json:"tid"`
@@ -211,6 +241,7 @@ func (a *App) registerHostHealthRoutes(mux *http.ServeMux) {
 		all = visible
 		unread := 0
 		for i := range all {
+			all[i] = a.notificationAudio(all[i])
 			all[i].Read = !all[i].Time.After(cleared) || a.state.NotificationReads[strings.ToLower(session.Email)][all[i].ID]
 			if !all[i].Read {
 				unread++

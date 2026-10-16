@@ -34,6 +34,7 @@ jobs:
           node scripts/test-n8n-workflow.cjs
           node scripts/test-reboot-policy.cjs
           node scripts/test-audio-permission.cjs
+          node scripts/test-audio-mute.cjs
           node .github/test-native-audio-bridge.cjs
           node scripts/test-dashboard-geometry.cjs
           node scripts/test-mfa-enrollment.cjs

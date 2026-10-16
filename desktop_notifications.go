@@ -153,8 +153,9 @@ func (a *App) registerDesktopRoutes(mux *http.ServeMux) {
 			if !scope.notification(n) {
 				continue
 			}
+			n = a.notificationAudio(n)
 			read := !n.Time.After(cleared) || a.state.NotificationReads[g.Owner][n.ID]
-			rows = append(rows, map[string]any{"id": n.ID, "time": n.Time, "title": n.Title, "detail": n.Detail, "severity": n.Severity, "event_id": n.EventID, "read": read, "continuous": n.Continuous, "isolation_ip": n.IsolationIP})
+			rows = append(rows, map[string]any{"id": n.ID, "time": n.Time, "title": n.Title, "detail": n.Detail, "severity": n.Severity, "event_id": n.EventID, "read": read, "continuous": n.Continuous, "isolation_ip": n.IsolationIP, "sound": n.Sound, "sound_type": n.SoundType})
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, map[string]any{"notifications": rows, "expires": g.Expires})

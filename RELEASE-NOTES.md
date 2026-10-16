@@ -1,4 +1,25 @@
-# Multipla SIEM 1.2.38
+# Multipla SIEM 1.2.39
+
+## 1.2.39
+
+Desativar alerta sonoro e Parar som interrompem a reprodução e mantêm o áudio
+desabilitado durante novas consultas, inclusive para sirene contínua. O botão
+de Eventos aciona a mesma preferência do áudio nativo Windows. Avisos de
+capacidade permanecem críticos e visíveis, mas silenciosos; eventos comuns
+exigem regra individual de som atualmente habilitada. Consultas repetidas não
+reproduzem novamente notificações pendentes. Isolamento direto mantém sua
+política explícita, sempre sujeita ao controle geral de áudio. Não é necessário
+limpar notificações para silenciar. Atualize servidor e app Windows.
+
+O arraste dos cards oferece prévia livre sobre áreas ocupadas; conflitos são
+ajustados uma vez ao soltar, com opção de desfazer. Restaurar posições originais
+fica sempre visível, preserva monitoramentos e seleções e permite salvar ou
+cancelar. Não há reorganização contínua durante atualizações de métricas.
+
+Testes locais cobrem silenciamento e corridas assíncronas, autorização atual de
+som nas APIs, WebView2 com saída fictícia, arraste e persistência. Não houve teste
+de áudio físico nem da sessão de produção. Pendências externas anteriores,
+incluindo Authenticode e armazenamento imutável adiado, permanecem aplicáveis.
 
 ## 1.2.38
 
