@@ -20,6 +20,9 @@ import (
 const backupLimit = 1024 * 1024
 
 type DashboardCardSettings struct {
+	X                *int   `json:"x,omitempty"`
+	Y                *int   `json:"y,omitempty"`
+	PixelWidth       int    `json:"pixel_width,omitempty"`
 	Width            int    `json:"width,omitempty"`
 	WidthBasisPoints int    `json:"width_basis_points,omitempty"`
 	Height           int    `json:"height,omitempty"`
@@ -27,6 +30,7 @@ type DashboardCardSettings struct {
 }
 
 type Preferences struct {
+	DashboardSnap  *bool                            `json:"dashboard_snap,omitempty"`
 	DashboardCards map[string]DashboardCardSettings `json:"dashboard_cards,omitempty"`
 	DashboardOrder []string                         `json:"dashboard_order,omitempty"`
 	DefaultPage    string                           `json:"default_page"`
@@ -245,6 +249,7 @@ func (a *App) restoreBackup(email string, data []byte) error {
 		return errors.New("não foi possível salvar configuração")
 	}
 	a.cfg = c
+	a.refreshSyslogOriginsLocked()
 	a.state.N8N.Enabled = false
 	a.state.N8N.Verified = ""
 	a.state.N8NOutbox = nil
@@ -279,9 +284,11 @@ func (a *App) restoreBackup(email string, data []byte) error {
 	a.audit(email, "backup restaurado; publicação de bloqueios desativada")
 	if e = a.persist(); e != nil {
 		a.cfg = oldCfg
+		a.refreshSyslogOriginsLocked()
 		a.state = oldState
 		if rollback := atomicJSON(a.configPath, oldCfg); rollback != nil {
 			a.cfg = c
+			a.refreshSyslogOriginsLocked()
 			a.cfg.AutoBlock = false
 			a.storageError = "Restauração interrompida; confira configuração e estado antes de ativar respostas"
 		}

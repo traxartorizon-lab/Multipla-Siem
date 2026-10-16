@@ -291,3 +291,9 @@ header{height:auto;min-height:76px;flex-wrap:wrap;padding-top:12px;padding-botto
 
 @keyframes isolation-flash{0%,100%{background:#7a1725;color:#fff;border-color:#ff6776}50%{background:#bf2940;color:#fff;border-color:#fff}}
 .isolation-pending{animation:isolation-flash 1s infinite}.isolation-pending:focus-visible{outline:3px solid #fff}@media(prefers-reduced-motion:reduce){.isolation-pending{animation:none;background:#7a1725;color:#fff}}
+
+/* Manual canvas: content growth scrolls inside a card, never moves its neighbors. */
+#overview .dashboard-grid.packed-dashboard>article{max-width:none;transition:none;overflow:auto;overscroll-behavior:contain}
+#overview .dashboard-grid.packed-dashboard>.panel{overflow:auto}
+#overview{overflow-x:auto}.dashboard-grid.organizing .dashboard-card-tools{position:sticky;top:0;z-index:2;background:var(--panel)}
+.account-dropdown{position:relative;display:inline-flex}.account-dropdown>.avatar{padding:0;cursor:pointer}.account-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:270px;max-width:calc(100vw - 24px);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px #0008;padding:8px;z-index:90}.account-menu[hidden],.account-settings-submenu[hidden]{display:none}.account-menu button{display:block;width:100%;text-align:left;padding:10px 12px;border-radius:5px}.account-menu button:focus-visible{outline:2px solid var(--accent)}.account-settings-submenu{padding-left:14px;border-left:2px solid var(--line);margin-left:10px}.problem-devices-dialog .problem-groups{max-height:65vh;overflow:auto}.problem-groups article{margin-top:12px}.problem-groups small{display:block}

@@ -10,7 +10,7 @@ Em Configurações → Contas de acesso, o Superadmin atribui:
 * **Administrativo:** administra a operação (dispositivos, regras, respostas e coleta). Contas, identidade Google, backup/restore, terminal, reinício e atualização são exclusivos do Superadmin. Alterar configuração não permite modificar a lista de contas autorizadas.
 * **Superadmin:** administração completa. A conta administrativa principal é protegida contra alteração pelo cadastro de contas.
 
-Contas antigas conservam as permissões anteriores até receberem um grupo explicitamente. Isso não implementa isolamento multiempresa; os grupos continuam no ambiente compartilhado. Não adicionar clientes externos enquanto o isolamento por tenant estiver pendente.
+Contas antigas conservam as permissões anteriores até receberem um grupo explicitamente. Grupos e escopo de clientes são controles distintos. Contas externas exigem escopo explícito de cliente, revisão de permissões e validação de isolamento; contas legadas mantêm escopo global até revisão.
 
 ## Vincular e usar
 
@@ -23,7 +23,7 @@ O vínculo permite exclusivamente receber os resumos de notificações e marcar 
 
 O login do painel é separado. O botão Entrar com Google abre o navegador padrão, usando o OAuth do servidor com PKCE. Compare o código exibido no app e no navegador, confirme o consentimento e depois a identidade no app. Uma prova PKCE é enviada por POST ao WebView2; o servidor cria ali uma sessão HttpOnly de uso normal. A solicitação vence em cinco minutos e é consumida uma única vez. Não há callback HTTP local, protocolo personalizado, cópia de cookies do Chrome ou envio de tokens Google ao app. O vínculo de notificações continua separado.
 
-O app recusa HTTP, certificados inválidos, navegação fora da origem e APIs nativas expostas ao conteúdo web. Não ignora certificados. Downloads da própria origem pedem destino ao usuário e não são executados. A sessão web usa perfil separado por execução; a exclusão é tentada ao sair, mas arquivos podem permanecer após falha/encerramento abrupto até os cookies expirarem. A chave de notificações nunca é passada ao WebView2. O áudio da página é silenciado para evitar duplicação; alertas do app usam a saída nativa selecionada. Notificações visuais dependem das permissões e do modo de concentração do Windows.
+O app recusa HTTP, certificados inválidos, navegação fora da origem e exposição de APIs nativas gerais ao conteúdo web; a única ponte permitida é a lista restrita de comandos de áudio validada por origem. Não ignora certificados. Downloads da própria origem pedem destino ao usuário e não são executados. A sessão web usa perfil separado por execução; a exclusão é tentada ao sair, mas arquivos podem permanecer após falha/encerramento abrupto até os cookies expirarem. A chave de notificações nunca é passada ao WebView2. O áudio da página é silenciado para evitar duplicação; alertas do app usam a saída nativa selecionada. Notificações visuais dependem das permissões e do modo de concentração do Windows.
 
 ## Botão multipla-update — habilitação única no servidor
 
@@ -35,7 +35,7 @@ sudo /usr/local/bin/multipla-siem -enable-app-update
 
 Isso instala unidade root e política polkit restrita. O serviço SIEM continua sem privilégios e só pode iniciar `multipla-app-update.service`, que executa o atualizador fixo `/usr/local/bin/multipla-update`. Não concede sudo ou controle de outras unidades. A chave pública e o repositório em `/etc/multipla-siem/update.json`, os executáveis e os arquivos da política/unidade devem permanecer de propriedade root e não graváveis por `multipla-siem`.
 
-Em Configurações → Atualização do servidor: Consultar estado → Executar multipla-update. Exige Superadmin, sessão válida, HTTPS, CSRF, senha local da própria conta e confirmação `ATUALIZAR`. Conta somente Google não pode usar esse botão até existir step-up compatível com sua identidade; não há fallback automático. A reautenticação por senha não é MFA. Existe limite de tentativas, bloqueio de concorrência e intervalo entre solicitações. A solicitação precisa ser persistida em auditoria antes de iniciar.
+Em Configurações → Atualização do servidor: Consultar estado → Executar multipla-update. Exige Superadmin, sessão válida, HTTPS, CSRF, TOTP recente e confirmação `ATUALIZAR`. Contas locais também precisam reautenticar com sua senha; contas Google usam o step-up TOTP. Nenhum fator é dispensado pela interface do menu. Existe limite de tentativas, bloqueio de concorrência e intervalo entre solicitações. A solicitação precisa ser persistida em auditoria antes de iniciar.
 
 O atualizador preserva a validação Ed25519, hashes/tamanhos, restrição de origem, backup, verificação de saúde e tentativa de retorno à versão anterior. A atualização acontece em unidade independente e sobrevive à parada do SIEM. Consulte o estado após reconectar; `success` com `ExecMainStatus=0` significa que o processo terminou sem erro, inclusive quando não existe versão mais recente. A auditoria registra a solicitação; o resultado detalhado fica no journal root:
 

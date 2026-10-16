@@ -173,6 +173,8 @@ type bucket struct {
 	Last  time.Time
 }
 type App struct {
+	inputPressure         syslogPressure
+	repeatWindows         map[string]repeatWindow
 	problemCounters       map[string]bucket
 	problemOriginCounters map[string]int
 	spoolInitialized      bool
@@ -455,6 +457,9 @@ func newApp(c Config, path string, demo bool) (*App, error) {
 	if e = validateRules(a.state.Rules); e != nil {
 		return nil, e
 	}
+	if err := a.loadRepeatWindows(); err != nil {
+		return nil, err
+	}
 	// Replay only the current day's bounded dashboard window; older days stay searchable on disk.
 	f, e := os.Open(a.journalPath(time.Now()))
 	if e == nil {
@@ -473,6 +478,17 @@ func newApp(c Config, path string, demo bool) (*App, error) {
 	} else if !os.IsNotExist(e) {
 		return nil, e
 	}
+	today := time.Now().UTC().Format("2006-01-02")
+	if a.totalDay != today {
+		a.totalDay = today
+		a.total = 0
+	}
+	for _, window := range a.repeatWindows {
+		if window.Group.Day == today && originalReceipt(window.Group.Latest) {
+			a.total += window.Group.Suppressed
+		}
+	}
+	a.refreshSyslogOriginsLocked()
 	return a, nil
 }
 func (a *App) journalPath(t time.Time) string {
@@ -486,15 +502,22 @@ func (a *App) remember(e Event) {
 		// append occasionally grows the backing array; advancing the slice amortizes that cost.
 		a.events = a.events[len(a.events)-2000:]
 	}
+	a.countReceiptLocked(e)
+	a.lastSeen[e.Device] = e.Time
+}
+func originalReceipt(e Event) bool {
+	return e.ParentID == "" && (!e.Alert || e.Kind == "wazuh" || e.Kind == "webhook")
+}
+func (a *App) countReceiptLocked(e Event) {
+	if !originalReceipt(e) {
+		return
+	}
 	day := e.Time.UTC().Format("2006-01-02")
 	if a.totalDay != day {
 		a.totalDay = day
 		a.total = 0
 	}
-	if !e.Alert || e.Kind == "wazuh" {
-		a.total++
-	}
-	a.lastSeen[e.Device] = e.Time
+	a.total++
 }
 func (a *App) persist() error { return atomicJSON(filepath.Join(a.cfg.DataDir, "state.json"), a.state) }
 func (a *App) audit(actor, action string) {
@@ -821,17 +844,27 @@ func (a *App) syslog() error {
 		udp.Close()
 		return e
 	}
+	reader := syslogPacketReader(udp)
+	queue := newSyslogQueue(syslogQueueSlots, func(packet syslogPacket) {
+		if d, ok := a.device(packet.Sender); ok {
+			a.ingest(d, packet.Raw)
+		}
+	}, func(packet syslogPacket) { a.inputPressure.record(packet.Sender, "udp_queue_full", 1) })
 	go func() {
+		defer queue.close()
 		defer udp.Close()
 		b := make([]byte, 65536)
 		for {
-			n, addr, e := udp.ReadFrom(b)
+			n, addr, lost, e := reader(b)
 			if e != nil {
 				return
 			}
 			host, _, _ := net.SplitHostPort(addr.String())
-			if d, ok := a.device(host); ok {
-				a.ingest(d, string(b[:n]))
+			if lost > 0 {
+				a.inputPressure.record("", "udp_kernel_overflow", int64(lost))
+			}
+			if a.syslogOriginAllowed(host) {
+				queue.enqueue(host, string(b[:min(n, syslogPayloadLimit)]))
 			}
 		}
 	}()
@@ -852,6 +885,7 @@ func (a *App) syslog() error {
 			select {
 			case sem <- struct{}{}:
 			default:
+				a.inputPressure.record(host, "tcp_connection_limit", 1)
 				conn.Close()
 				continue
 			}
@@ -936,6 +970,8 @@ func (a *App) maintenance() {
 				delete(a.seen, k)
 			}
 		}
+		a.accountInputDropsLocked()
+		a.pruneRepeatWindowsLocked(now)
 		a.drainSpoolLocked()
 		entries, _ := filepath.Glob(filepath.Join(a.cfg.DataDir, "events-*.jsonl"))
 		problemEntries, _ := filepath.Glob(filepath.Join(a.cfg.DataDir, "problems", "events-*.jsonl"))
@@ -1130,7 +1166,7 @@ func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "Grupo sem permissão para esta operação", 403)
 			return
 		}
-		if role != "admin" && !strings.HasPrefix(r.URL.Path, "/api/desktop/grants") && !(strings.HasPrefix(r.URL.Path, "/api/notifications/") && strings.HasSuffix(r.URL.Path, "/read")) && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && !(r.Method == "PUT" && r.URL.Path == "/api/dashboard/layout") && !(r.Method == "POST" && r.URL.Path == "/api/notifications/clear") && !(r.Method == "POST" && (r.URL.Path == "/api/assistant/plan" || r.URL.Path == "/api/assistant/query")) && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export" && r.URL.Path != "/api/events/history" && r.URL.Path != "/api/devices/metrics" && r.URL.Path != "/api/devices/resource-history" && r.URL.Path != "/api/system/health" && r.URL.Path != "/api/system/usage-history" && r.URL.Path != "/api/notifications" && r.URL.Path != "/api/events/critical-ips" && r.URL.Path != "/api/dashboard/distribution" && r.URL.Path != "/api/dashboard/activity" && r.URL.Path != "/api/reports" && r.URL.Path != "/api/network")) {
+		if role != "admin" && !strings.HasPrefix(r.URL.Path, "/api/desktop/grants") && !(strings.HasPrefix(r.URL.Path, "/api/notifications/") && strings.HasSuffix(r.URL.Path, "/read")) && r.URL.Path != "/auth/logout" && r.URL.Path != "/api/activity" && !(r.Method == "PUT" && r.URL.Path == "/api/dashboard/layout") && !(r.Method == "POST" && r.URL.Path == "/api/notifications/clear") && !(r.Method == "POST" && (r.URL.Path == "/api/assistant/plan" || r.URL.Path == "/api/assistant/query")) && (r.Method != "GET" || (r.URL.Path != "/api/snapshot" && r.URL.Path != "/api/export" && r.URL.Path != "/api/events/history" && r.URL.Path != "/api/problem-devices" && r.URL.Path != "/api/problem-devices/events" && r.URL.Path != "/api/devices/metrics" && r.URL.Path != "/api/devices/resource-history" && r.URL.Path != "/api/system/health" && r.URL.Path != "/api/system/usage-history" && r.URL.Path != "/api/notifications" && r.URL.Path != "/api/events/critical-ips" && r.URL.Path != "/api/dashboard/distribution" && r.URL.Path != "/api/dashboard/activity" && r.URL.Path != "/api/reports" && r.URL.Path != "/api/network")) {
 			http.Error(w, "Perfil somente visualizacao: operacao nao permitida", 403)
 			return
 		}
@@ -1316,7 +1352,7 @@ func (a *App) routes() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(b)
 	})
-	for _, path := range []string{"mfa.js", "mfa.css", "problem-devices.js", "isolation-alerts.js", "native-audio.js", "desktop-link.js", "app-update.js", "collectors.js", "server-terminal.js", "assistant.js", "host-chart.js", "style.css", "favicon.svg", "alert-sounds.js", "critical-controls.js", "host-health.js", "device-network.js", "app.js", "backup.js", "accounts.js", "login.js", "receivers.js", "n8n.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
+	for _, path := range []string{"mfa.js", "mfa.css", "problem-devices.js", "isolation-alerts.js", "native-audio.js", "desktop-link.js", "app-update.js", "collectors.js", "server-terminal.js", "assistant.js", "host-chart.js", "style.css", "favicon.svg", "alert-sounds.js", "critical-controls.js", "host-health.js", "device-network.js", "app.js", "backup.js", "accounts.js", "account-menu.js", "login.js", "receivers.js", "n8n.js", "dashboard.js", "reports.js", "network.js", "ssh.js", "dhcp.js", "test-reports.js", "xterm.js", "xterm.css"} {
 		p := path
 		mux.HandleFunc("GET /"+p, func(w http.ResponseWriter, r *http.Request) {
 			if strings.HasSuffix(p, ".js") {
@@ -1516,7 +1552,7 @@ func (a *App) routes() http.Handler {
 			writeJSON(w, map[string]any{"version": productVersion(), "role": role, "group": groupAlerts, "events": critical, "critical_events": critical, "alerts": len(critical), "total": len(critical), "config": map[string]any{"devices": []Device{}, "auto_block": false}, "email": s.Email, "csrf": s.CSRF, "preferences": a.preferences(s.Email)})
 			return
 		}
-		writeJSON(w, map[string]any{"version": productVersion(), "role": role, "group": a.groupLocked(s.Email), "snmp_devices": snmpDevices, "event_clients": a.eventClientIndex(), "preferences": a.preferences(s.Email), "drive_connected": a.state.DriveTokens[strings.ToLower(s.Email)] != "", "analysis": a.analysisSnapshot(), "local_ai": a.localAISnapshot(), "events": evs, "critical_events": a.criticalDashboardEvents(), "alerts": alerts, "total": total, "bins": bins, "blocks": blocks, "config": visibleConfig, "rules": a.state.Rules, "audit": visibleAudit, "last_seen": a.lastSeen, "device_presence": visiblePresence, "mail_status": a.mailStatus, "storage_error": a.storageError, "dropped": a.dropped, "feed_seen": a.feedSeen, "email": s.Email, "csrf": s.CSRF, "demo": a.demo, "local_account_ready": a.state.LocalAdmin.Hash != "", "google_ready": a.state.GoogleSettings != "" || secret("GOOGLE_CLIENT_ID") != "", "mail_ready": secret("GMAIL_APP_PASSWORD") != ""})
+		writeJSON(w, map[string]any{"version": productVersion(), "role": role, "group": a.groupLocked(s.Email), "capabilities": a.state.Accounts[strings.ToLower(s.Email)].Capabilities, "snmp_devices": snmpDevices, "event_clients": a.eventClientIndex(), "preferences": a.preferences(s.Email), "drive_connected": a.state.DriveTokens[strings.ToLower(s.Email)] != "", "analysis": a.analysisSnapshot(), "local_ai": a.localAISnapshot(), "events": evs, "critical_events": a.criticalDashboardEvents(), "alerts": alerts, "total": total, "bins": bins, "blocks": blocks, "config": visibleConfig, "rules": a.state.Rules, "audit": visibleAudit, "last_seen": a.lastSeen, "device_presence": visiblePresence, "mail_status": a.mailStatus, "storage_error": a.storageError, "dropped": a.dropped, "feed_seen": a.feedSeen, "email": s.Email, "csrf": s.CSRF, "demo": a.demo, "local_account_ready": a.state.LocalAdmin.Hash != "", "google_ready": a.state.GoogleSettings != "" || secret("GOOGLE_CLIENT_ID") != "", "mail_ready": secret("GMAIL_APP_PASSWORD") != ""})
 	}))
 	mux.HandleFunc("PUT /api/config", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		var c Config
@@ -1583,6 +1619,7 @@ func (a *App) routes() http.Handler {
 			}
 		}
 		a.cfg = c
+		a.refreshSyslogOriginsLocked()
 		a.audit(s.Email, "configuração atualizada")
 		if e := a.persist(); e != nil {
 			http.Error(w, "Configuração salva, auditoria falhou: "+e.Error(), 500)
@@ -1852,6 +1889,7 @@ func (a *App) wazuh(w http.ResponseWriter, r *http.Request) {
 	}
 	sender := a.clientIP(r)
 	ev := Event{SenderIP: sender, Tenant: a.tenantForSenderLocked(sender), ID: token(), Time: time.Now().UTC(), Device: redact(v.Agent.Name), Kind: "wazuh", SourceIP: ip, Message: redact(v.FullLog), Level: v.Rule.Level, Rule: redact("Wazuh " + v.Rule.ID + ": " + v.Rule.Description), Alert: true}
+	ev = a.trackProblemLocked(ev)
 	if !a.appendEvent(ev) {
 		http.Error(w, "falha de armazenamento", 503)
 		return

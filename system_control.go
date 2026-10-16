@@ -86,6 +86,10 @@ func (a *App) registerSystemRoutes(mux *http.ServeMux) {
 		writeJSON(w, map[string]any{"by_device": dashboardReportCache.report.ByDevice, "total": dashboardReportCache.report.Originals, "partial": dashboardReportCache.report.Partial, "missing_days": dashboardReportCache.report.Missing, "generated": dashboardReportCache.report.Generated})
 	}))
 	mux.HandleFunc("POST /api/system/reboot", a.auth(func(w http.ResponseWriter, r *http.Request) {
+		if !a.hostSuperadmin(r) {
+			http.Error(w, "Exige Superadmin do servidor", 403)
+			return
+		}
 		var body struct {
 			Confirm string `json:"confirm"`
 		}

@@ -1,0 +1,130 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "pkg:nuget/BouncyCastle.Cryptography@2.7.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        },
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "name": "BouncyCastle.Cryptography",
+      "properties": [
+        {
+          "name": "nuget:contentHash:SHA-512:base64",
+          "value": "U+12df8UEWHgBi04YVf/Lgi2dy3SItlIYvHjjEVa/BngCQIzDCDRBk50DDByCfDvSbe5pRNFr3b7UrVK2kMcLw=="
+        },
+        {
+          "name": "nuget:contentHash:scope",
+          "value": "NuGet normalized package content hash from packages.lock.json; not the raw .nupkg file checksum"
+        }
+      ],
+      "purl": "pkg:nuget/BouncyCastle.Cryptography@2.7.0",
+      "type": "library",
+      "version": "2.7.0"
+    },
+    {
+      "bom-ref": "pkg:nuget/Microsoft.Web.WebView2@1.0.4258.31",
+      "name": "Microsoft.Web.WebView2",
+      "properties": [
+        {
+          "name": "nuget:contentHash:SHA-512:base64",
+          "value": "sHVZ2MQrHT1J3q5/6csn0fIP27rzpTO/RRC+wPQDrZheB7T4t2n+vVbY6SdCKr4WRV9s/gmBM3PPMWWJtoDzMg=="
+        },
+        {
+          "name": "nuget:contentHash:scope",
+          "value": "NuGet normalized package content hash from packages.lock.json; not the raw .nupkg file checksum"
+        }
+      ],
+      "purl": "pkg:nuget/Microsoft.Web.WebView2@1.0.4258.31",
+      "type": "library",
+      "version": "1.0.4258.31"
+    },
+    {
+      "bom-ref": "pkg:nuget/NAudio.Core@2.2.1",
+      "name": "NAudio.Core",
+      "properties": [
+        {
+          "name": "nuget:contentHash:SHA-512:base64",
+          "value": "GgkdP6K/7FqXFo7uHvoqGZTJvW4z8g2IffhOO4JHaLzKCdDOUEzVKtveoZkCuUX8eV2HAINqi7VFqlFndrnz/g=="
+        },
+        {
+          "name": "nuget:contentHash:scope",
+          "value": "NuGet normalized package content hash from packages.lock.json; not the raw .nupkg file checksum"
+        }
+      ],
+      "purl": "pkg:nuget/NAudio.Core@2.2.1",
+      "type": "library",
+      "version": "2.2.1"
+    },
+    {
+      "bom-ref": "pkg:nuget/NAudio.Wasapi@2.2.1",
+      "name": "NAudio.Wasapi",
+      "properties": [
+        {
+          "name": "nuget:contentHash:SHA-512:base64",
+          "value": "lFfXoqacZZe0WqNChJgGYI+XV/n/61LzPHT3C1CJp4khoxeo2sziyX5wzNYWeCMNbsWxFvT3b3iXeY1UYjBhZw=="
+        },
+        {
+          "name": "nuget:contentHash:scope",
+          "value": "NuGet normalized package content hash from packages.lock.json; not the raw .nupkg file checksum"
+        }
+      ],
+      "purl": "pkg:nuget/NAudio.Wasapi@2.2.1",
+      "type": "library",
+      "version": "2.2.1"
+    }
+  ],
+  "dependencies": [
+    {
+      "dependsOn": [],
+      "ref": "pkg:nuget/BouncyCastle.Cryptography@2.7.0"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:nuget/Microsoft.Web.WebView2@1.0.4258.31"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:nuget/NAudio.Core@2.2.1"
+    },
+    {
+      "dependsOn": [
+        "pkg:nuget/NAudio.Core@2.2.1"
+      ],
+      "ref": "pkg:nuget/NAudio.Wasapi@2.2.1"
+    },
+    {
+      "dependsOn": [
+        "pkg:nuget/BouncyCastle.Cryptography@2.7.0",
+        "pkg:nuget/Microsoft.Web.WebView2@1.0.4258.31",
+        "pkg:nuget/NAudio.Core@2.2.1",
+        "pkg:nuget/NAudio.Wasapi@2.2.1"
+      ],
+      "ref": "Multipla-SIEM-Windows@1.2.37"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "bom-ref": "Multipla-SIEM-Windows@1.2.37",
+      "name": "Multipla SIEM Windows",
+      "type": "application",
+      "version": "1.2.37"
+    },
+    "properties": [
+      {
+        "name": "multipla:inventory-scope",
+        "value": "Locked NuGet dependencies; .NET runtime covered by signed Windows file manifest and pinned SDK provenance"
+      }
+    ]
+  },
+  "specVersion": "1.6",
+  "version": 1
+}

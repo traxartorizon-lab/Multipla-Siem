@@ -211,6 +211,8 @@ func (a *App) receiveWebhook(w http.ResponseWriter, r *http.Request) {
 	event := Event{ID: token(), Time: time.Now().UTC(), Kind: "webhook", Protocol: "webhook", SenderIP: peer, Device: "Webhook " + peer, SourceIP: input.SourceIP, Message: redact(input.Message), Rule: redact(title), Level: input.Level, Alert: true, Detector: "webhook"}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	event.Tenant = a.tenantForSenderLocked(event.SenderIP)
+	event = a.trackProblemLocked(event)
 	if !a.appendEvent(event) {
 		http.Error(w, "falha no armazenamento", 503)
 		return

@@ -222,6 +222,17 @@ func (a *App) drainSpoolLocked() {
 			}
 			continue
 		}
+		if e.ProblemKey != "" {
+			e.ProblemKey = ""
+			e = a.trackProblemLocked(e)
+			if e.ProblemKey != "" {
+				if os.Remove(path) == nil {
+					a.spoolRemoved(entry.Name(), int64(len(raw)))
+				}
+				processed++
+				continue
+			}
+		}
 		line, _ := json.Marshal(e)
 		if !a.journalQuota(e, int64(len(line)+1)) {
 			continue

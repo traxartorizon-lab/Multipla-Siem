@@ -184,6 +184,7 @@ func (a *App) registerAccountRoutes(mux *http.ServeMux) {
 			return
 		}
 		a.cfg = cfg
+		a.refreshSyslogOriginsLocked()
 		for _, terminal := range a.sshTerminals {
 			if strings.EqualFold(terminal.owner, input.Email) {
 				terminal.close("Permissão de acesso alterada")

@@ -164,13 +164,13 @@ func TestProblemsPreserveCriticalNotificationsOutsideGlobalJournal(t *testing.T)
 	a := testApp(t)
 	d := Device{Name: "host", IP: "100.64.0.10", Kind: "proxmox", Client: "A"}
 	a.cfg.Devices = []Device{d}
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 24; i++ {
 		a.ingest(d, "kernel panic on host")
 	}
 	if len(a.state.ProblemGroups) != 1 {
 		t.Fatal("repetitions not grouped")
 	}
-	path := a.problemJournalPath(time.Now())
+	path := a.repeatPath(problemKey(Event{Tenant: "A", Device: d.Name, SenderIP: d.IP, Kind: d.Kind, Protocol: "syslog", Message: "kernel panic on host"}))
 	if _, err := os.Stat(path); err != nil {
 		t.Fatal("separate journal absent", err)
 	}

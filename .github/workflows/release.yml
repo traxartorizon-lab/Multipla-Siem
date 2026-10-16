@@ -28,12 +28,13 @@ jobs:
           CGO_ENABLED: '0'
           GOTELEMETRY: 'off'
         run: |
-          for file in app dashboard device-network critical-controls host-health alert-sounds backup n8n assistant host-chart ssh collectors server-terminal accounts app-update desktop-link mfa native-audio isolation-alerts problem-devices; do node --check "web/$file.js"; done
+          for file in app dashboard device-network critical-controls host-health alert-sounds backup n8n assistant host-chart ssh collectors server-terminal accounts app-update desktop-link mfa native-audio account-menu isolation-alerts problem-devices; do node --check "web/$file.js"; done
           node scripts/test-app-update-policy.cjs
           node scripts/test-critical-client-focus.cjs
           node scripts/test-n8n-workflow.cjs
           node scripts/test-reboot-policy.cjs
           node scripts/test-audio-permission.cjs
+          node .github/test-native-audio-bridge.cjs
           node scripts/test-mfa-enrollment.cjs
           bash -n scripts/linux-collector-install.sh
           python3 scripts/test-linux-installer.py
@@ -86,12 +87,19 @@ jobs:
         run: |
           dotnet restore desktop/Multipla.Siem.Desktop.csproj --locked-mode -r win-x64
           if ($LASTEXITCODE -ne 0) { throw 'Restore/audit failed' }
+          python scripts/windows-sbom.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows dependency SBOM failed' }
           dotnet publish desktop/Multipla.Siem.Desktop.csproj -c Release -r win-x64 --self-contained true --no-restore -o app-package
           if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
           $app = Join-Path $PWD 'app-package/Multipla.Siem.exe'
           $process = Start-Process -FilePath $app -ArgumentList '--self-test' -WindowStyle Hidden -PassThru -Wait
           if ($process.ExitCode -ne 0 -or !(Test-Path app-package/self-test-result.txt)) { throw 'Self-test failed' }
           Get-Content app-package/self-test-result.txt
+          ./scripts/run-audio-bridge-test.ps1 -Application $app -Frontend (Join-Path $PWD 'web')
+          if (!(Test-Path app-package/audio-bridge-self-test-result.txt)) { throw 'Real WebView audio bridge evidence missing' }
+          Get-Content app-package/audio-bridge-self-test-result.txt
+          Remove-Item -LiteralPath app-package/audio-bridge-self-test-result.txt
+          ./scripts/run-update-self-test.ps1 -Application $app -Repository $PWD
 
       - name: Verify and package Windows portable app
         shell: pwsh

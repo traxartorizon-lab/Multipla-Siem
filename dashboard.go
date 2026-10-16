@@ -33,6 +33,7 @@ func validateDashboardOrder(order []string) error {
 func (a *App) registerDashboardRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/dashboard/layout", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
+			Snap  *bool                            `json:"snap"`
 			Order []string                         `json:"order"`
 			Cards map[string]DashboardCardSettings `json:"cards"`
 		}
@@ -63,6 +64,9 @@ func (a *App) registerDashboardRoutes(mux *http.ServeMux) {
 		if body.Cards != nil {
 			p.DashboardCards = body.Cards
 		}
+		if body.Snap != nil {
+			p.DashboardSnap = body.Snap
+		}
 		p.DashboardOrder = append([]string(nil), body.Order...)
 		a.state.Preferences[email] = p
 		if err := a.persist(); err != nil {
@@ -92,6 +96,9 @@ func validateDashboardSettings(cards map[string]DashboardCardSettings) error {
 	for id, c := range cards {
 		if err := validateDashboardOrder([]string{id}); err != nil {
 			return err
+		}
+		if (c.X != nil && (*c.X < 0 || *c.X > 12000)) || (c.Y != nil && (*c.Y < 0 || *c.Y > 48000)) || c.PixelWidth < 0 || c.PixelWidth > 8000 || (c.PixelWidth > 0 && c.PixelWidth < 120) {
+			return errors.New("posição ou largura inválida")
 		}
 		if c.WidthBasisPoints < 0 || c.WidthBasisPoints > 10000 || c.Width < 0 || c.Width > 4 || c.Height < 0 || c.Height > 2400 || (c.Height > 0 && c.Height < 120) || len(c.Device) > 64 {
 			return errors.New("dimensões inválidas")

@@ -108,12 +108,14 @@ func (a *App) registerLocalAuth(mux *http.ServeMux) {
 		}
 		if err = validateConfig(a.cfg); err != nil {
 			a.cfg = oldConfig
+			a.refreshSyslogOriginsLocked()
 			a.mu.Unlock()
 			http.Error(w, "configuração inválida", 400)
 			return
 		}
 		if err = atomicJSON(a.configPath, a.cfg); err != nil {
 			a.cfg = oldConfig
+			a.refreshSyslogOriginsLocked()
 			a.mu.Unlock()
 			http.Error(w, "falha na configuração", 503)
 			return
@@ -124,6 +126,7 @@ func (a *App) registerLocalAuth(mux *http.ServeMux) {
 		if err = a.persist(); err != nil {
 			a.state.LocalAdmin = old
 			a.cfg = oldConfig
+			a.refreshSyslogOriginsLocked()
 			atomicJSON(a.configPath, oldConfig)
 			a.mu.Unlock()
 			http.Error(w, "falha ao salvar conta", 503)

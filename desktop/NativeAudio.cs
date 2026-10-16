@@ -4,9 +4,20 @@ using NAudio.CoreAudioApi;
 
 namespace Multipla.Siem.Desktop;
 
+internal sealed class AudioRequestBudget
+{
+    DateTimeOffset start;
+    int count;
+    public bool Allow(DateTimeOffset now)
+    {
+        if(now-start>=TimeSpan.FromSeconds(1)){start=now;count=0;}
+        return ++count<=16;
+    }
+}
+
 internal partial class PanelWindow
 {
-    DateTimeOffset nextAudioMessage;
+    readonly AudioRequestBudget audioRequestBudget=new();
     bool audioChoosing;
     List<(string Id,string Name)> AudioOutputs()
     {
@@ -24,8 +35,10 @@ internal partial class PanelWindow
     }
     async void NativeAudioMessage(object? sender,CoreWebView2WebMessageReceivedEventArgs e)
     {
-        if(origin==null||!SecurityPolicy.SameOrigin(origin,e.Source)||!SecurityPolicy.SameOrigin(origin,browser.Source?.AbsoluteUri??"")||DateTimeOffset.UtcNow<nextAudioMessage)return;
-        nextAudioMessage=DateTimeOffset.UtcNow.AddMilliseconds(150);
+        if(origin==null||!SecurityPolicy.SameOrigin(origin,e.Source)||!SecurityPolicy.SameOrigin(origin,browser.Source?.AbsoluteUri??""))return;
+        // Permit ordinary outputs→select→configure→test bursts; the former
+        // blanket 150ms gate silently discarded legitimate successive actions.
+        if(!audioRequestBudget.Allow(DateTimeOffset.UtcNow))return;
         try
         {
             var raw=e.WebMessageAsJson;if(raw.Length>4096)return;
@@ -39,22 +52,22 @@ internal partial class PanelWindow
                     if(audioChoosing)return;audioChoosing=true;
                     try
                     {
-                        var outputs=AudioOutputs();using var dialog=new Form{Text="Saída de áudio · Multipla SIEM",Width=600,Height=180,StartPosition=FormStartPosition.CenterParent,Icon=Icon};
+                        var outputs=AudioOutputs();using var dialog=new Form{Text="Saída de áudio · "+Branding.AppName,Width=600,Height=180,StartPosition=FormStartPosition.CenterParent,Icon=Icon};
                         var list=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Dock=DockStyle.Top};list.Items.AddRange(outputs.Select(d=>(object)d.Name).ToArray());list.SelectedIndex=Math.Max(0,outputs.FindIndex(d=>d.Id==settings.AudioDevice));
                         var save=new Button{Text="Usar esta saída",DialogResult=DialogResult.OK,Dock=DockStyle.Bottom};dialog.Controls.Add(list);dialog.Controls.Add(save);dialog.AcceptButton=save;
-                        if(dialog.ShowDialog(this)==DialogResult.OK){settings=settings with{AudioDevice=outputs[list.SelectedIndex].Id};SecureStore.Save(settings);StopSound();}
+                        if(dialog.ShowDialog(this)==DialogResult.OK){settings=settings with{AudioDevice=outputs[list.SelectedIndex].Id};SavePreferences(settings);StopSound();}
                     }finally{audioChoosing=false;}
                     SendAudioState();return;
                 case "select":
                     var id=root.GetProperty("device").GetString()??"";
                     if(!AudioOutputs().Any(d=>d.Id==id))throw new InvalidOperationException("Saída indisponível. Selecione novamente.");
-                    settings=settings with{AudioDevice=id};SecureStore.Save(settings);StopSound();SendAudioState();return;
+                    settings=settings with{AudioDevice=id};SavePreferences(settings);StopSound();SendAudioState();return;
                 case "configure":
                     var volume=root.GetProperty("volume").GetInt32();var sound=root.GetProperty("sound").GetString();var enabled=root.GetProperty("enabled").GetBoolean();
                     if(volume<0||volume>100||sound is not ("beep" or "siren"))return;
-                    settings=settings with{Volume=volume,SoundType=sound,Sound=enabled};SecureStore.Save(settings);if(!enabled&&!notifications.Any(n=>n.Continuous&&!n.Read))StopSound();SendAudioState();return;
+                    settings=settings with{Volume=volume,SoundType=sound,Sound=enabled};SavePreferences(settings);if(!enabled&&!notifications.Any(n=>n.Continuous&&!n.Read))StopSound();SendAudioState();return;
                 case "test":
-                    settings=settings with{Sound=true};SecureStore.Save(settings);
+                    settings=settings with{Sound=true};SavePreferences(settings);
                     StopSound();StartSound();await Task.Delay(4000,lifetime.Token);if(!notifications.Any(n=>n.Continuous&&!n.Read))StopSound();SendAudioState();return;
                 case "stop":
                     if(!notifications.Any(n=>n.Continuous&&!n.Read))StopSound();SendAudioState();return;

@@ -6,7 +6,7 @@
     "component": {
       "type": "application",
       "name": "Multipla SIEM",
-      "version": "1.2.36"
+      "version": "1.2.37"
     }
   },
   "components": [
@@ -32,6 +32,11 @@
     },
     {
       "type": "library",
+      "name": "BouncyCastle.Cryptography",
+      "version": "2.7.0"
+    },
+    {
+      "type": "library",
       "name": "Microsoft.Web.WebView2",
       "version": "1.0.4258.31"
     },
@@ -44,11 +49,6 @@
       "type": "library",
       "name": "NAudio.Core",
       "version": "2.2.1"
-    },
-    {
-      "type": "library",
-      "name": "Microsoft.Web.WebView2",
-      "version": "1.0.4258.31"
     }
   ]
 }

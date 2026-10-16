@@ -75,6 +75,10 @@ func appUpdateStatus(ctx context.Context) (map[string]string, error) {
 
 func (a *App) registerUpdateRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/system/update", a.auth(func(w http.ResponseWriter, r *http.Request) {
+		if !a.hostSuperadmin(r) {
+			http.Error(w, "Exige Superadmin do servidor", 403)
+			return
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
 		status, err := appUpdateStatus(ctx)
@@ -85,6 +89,10 @@ func (a *App) registerUpdateRoutes(mux *http.ServeMux) {
 		writeJSON(w, map[string]any{"status": status, "version": productVersion()})
 	}))
 	mux.HandleFunc("POST /api/system/update", a.auth(func(w http.ResponseWriter, r *http.Request) {
+		if !a.hostSuperadmin(r) {
+			http.Error(w, "Exige Superadmin do servidor", 403)
+			return
+		}
 		if a.demo || runtime.GOOS != "linux" || r.TLS == nil {
 			http.Error(w, "Atualização exige HTTPS no servidor de produção", 403)
 			return

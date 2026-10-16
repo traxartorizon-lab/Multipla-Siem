@@ -21,8 +21,10 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="app.ico" />
+    <None Update="BouncyCastle-LICENSE.md;Apache-2.0.txt;THIRD-PARTY-NOTICES.md;windows-nuget-sbom.cdx.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
   </ItemGroup>
   <Target Name="RemoveUnusedWpf" BeforeTargets="ResolveAssemblyReferences"><ItemGroup><Reference Remove="@(Reference)" Condition="%(Reference.Filename) == 'Microsoft.Web.WebView2.Wpf'" /></ItemGroup></Target>
 </Project>

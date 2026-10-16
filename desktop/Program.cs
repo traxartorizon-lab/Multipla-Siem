@@ -18,9 +18,29 @@ internal static class Program
     [STAThread]
     static void Main(string[] args)
     {
+        if (args.Length==2 && args[0]=="--audio-bridge-self-test") { ApplicationConfiguration.Initialize(); AudioBridgeSelfTest.Run(args[1]); return; }
+        if (args.Length==2 && args[0]=="--update-self-test") { ApplicationConfiguration.Initialize(); DesktopUpdateSelfTest.Run(args[1]); return; }
         if (args.Contains("--self-test")) { SelfTest.Run(); return; }
-        using var instance = new Mutex(true, @"Local\Multipla.Siem.Desktop", out var first);
-        if (!first) return;
+        var updateRuntime=DesktopUpdateRuntime.Production();
+        if(args.Length==1&&args[0]=="--update-health-check")
+        {try{updateRuntime.HealthCheck();Environment.ExitCode=0;}catch{Environment.ExitCode=1;}return;}
+        var handoff=args.Length==1&&args[0]=="--update-handoff";
+        if(handoff){try{updateRuntime.ConsumeTicket("handoff");}catch{Environment.ExitCode=1;return;}}
+        using var instance = DesktopInstanceGate.Production(handoff||args.Contains("--update-selected"));
+        if (!instance.Acquired) { MessageBox.Show("Já existe uma instância do Multipla SIEM em execução na bandeja. Encerre-a pelo menu Sair antes de abrir esta cópia: "+Branding.AppName+". Uma instância anterior não é substituída ao abrir outro executável.", Branding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if(!handoff)
+        {
+            try{if(updateRuntime.Select(args.Contains("--tray")))return;}
+            catch
+            {
+                try
+                {
+                    if(!updateRuntime.CanRecoverSelection||MessageBox.Show("O estado das atualizações locais não pôde ser validado. Recuperar somente esse estado e iniciar esta cópia base?\n\nO vínculo, as credenciais e as preferências do SIEM serão preservados. A seleção inválida será guardada como selection.invalid.backup; nenhum executável do cache será iniciado.",Branding.AppName,MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
+                    updateRuntime.RecoverSelection(true);
+                }
+                catch{MessageBox.Show("A recuperação segura não foi possível. Abra a cópia original instalada e verifique permissões ou links no diretório de atualizações.",Branding.AppName);return;}
+            }
+        }
         ApplicationConfiguration.Initialize();
         Branding.InitializeTaskbar();
         Application.Run(new PanelWindow(args.Contains("--tray")));
@@ -76,7 +96,7 @@ internal record NotificationResponse([property: JsonPropertyName("notifications"
 internal partial class PanelWindow : Form
 {
     readonly WebView2 browser = new() { Dock = DockStyle.Fill };
-    readonly NotifyIcon tray = new() { Icon = Branding.AppIcon, Text = Branding.AppName, Visible = true };
+    readonly NotifyIcon tray = new() { Icon = Branding.AppIcon, Text = Branding.AppName, Visible = false };
     readonly Label state = new() { Text = "Configure o servidor e vincule o app para receber alertas.", AutoSize = true, Padding = new Padding(8) };
     readonly System.Windows.Forms.Timer timer = new() { Interval = 5000 };
     readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromSeconds(15) };
@@ -101,12 +121,16 @@ internal partial class PanelWindow : Form
     readonly System.Windows.Forms.Timer isolationBlink = new(){Interval=500};
  readonly string profile = Path.Combine(SecureStore.DirectoryPath, "sessions", Guid.NewGuid().ToString("N"));
 
-    public PanelWindow(bool startHidden)
+    readonly Action<Preferences> persistPreferences;
+    void SavePreferences(Preferences value)=>persistPreferences(value);
+    public PanelWindow(bool startHidden, bool isolatedTest=false, Action<Preferences>? testStore=null,DesktopUpdateUiFixture? updateFixture=null)
     {
+        persistPreferences=isolatedTest?(testStore??(_=>{})):SecureStore.Save;
+        tray.Visible=!isolatedTest;
         isolationBlink.Tick+=(_,_)=>{state.BackColor=state.BackColor==Color.Red?SystemColors.Control:Color.Red;state.ForeColor=state.BackColor==Color.Red?Color.White:SystemColors.ControlText;};
         Icon=Branding.AppIcon;ShowIcon=true;
         Text = Branding.AppName; Width = 1280; Height = 850;
-        try { settings = SecureStore.Load(); } catch { settings = new(); state.Text = "Não foi possível recuperar o vínculo. Configure novamente."; }
+        try { settings = isolatedTest ? new() : SecureStore.Load(); } catch { settings = new(); state.Text = "Não foi possível recuperar o vínculo. Configure novamente."; }
         var strip = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
         var configure = new Button { Text = "Servidor, vínculo e áudio", AutoSize = true };
         var alerts = new Button { Text = "Notificações", AutoSize = true };
@@ -120,23 +144,27 @@ internal partial class PanelWindow : Form
         menu.Items.Add("Abrir painel", null, (_, _) => OpenPanel());
         menu.Items.Add("Notificações / marcar leitura", null, (_, _) => ShowNotifications());
         menu.Items.Add("Configurar", null, async (_, _) => await Configure());
-        var startup = new ToolStripMenuItem("Iniciar com o Windows") { CheckOnClick = true, Checked = StartupEnabled() };
+        InitializeAppUpdates(menu,isolatedTest,updateFixture);
+        menu.Items.Add("Sobre / versão desta instância",null,(_,_)=>MessageBox.Show(this,Branding.AppName+"\nExecutável: "+Environment.ProcessPath,"Sobre · "+Branding.AppName,MessageBoxButtons.OK,MessageBoxIcon.Information));
+        var startup = new ToolStripMenuItem("Iniciar com o Windows") { CheckOnClick = true, Checked = !isolatedTest && StartupEnabled() };
         startup.Click += (_, _) => { try { SetStartup(startup.Checked); } catch { startup.Checked = StartupEnabled(); MessageBox.Show("Não foi possível alterar a inicialização."); } };
         menu.Items.Add(startup);
-        menu.Items.Add("Desvincular este app", null, (_, _) => { settings = settings with { Key = "" }; SecureStore.Save(settings); StopSound(); state.Text = "Desvinculado localmente. Revogue também o vínculo no painel."; });
+        menu.Items.Add("Desvincular este app", null, (_, _) => { settings = settings with { Key = "" }; SavePreferences(settings); StopSound(); state.Text = "Desvinculado localmente. Revogue também o vínculo no painel."; });
         menu.Items.Add("Sair", null, (_, _) => { exiting = true; Close(); });
         tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => OpenPanel(); tray.BalloonTipClicked += (_, _) => ShowNotifications();
-        FormClosing += (_, eventArgs) => { if (!exiting && eventArgs.CloseReason == CloseReason.UserClosing) { eventArgs.Cancel = true; Hide(); } };
+        if(!isolatedTest) FormClosing += (_, eventArgs) => { if (!exiting && eventArgs.CloseReason == CloseReason.UserClosing) { eventArgs.Cancel = true; Hide(); } };
         timer.Tick += async (_, _) => await Poll();
-        Shown += async (_, _) => { if (startHidden) Hide(); await LoadPanel(); timer.Start(); };
+        if(!isolatedTest) Shown += async (_, _) => { if (startHidden) Hide(); await LoadPanel(); timer.Start(); };
     }
+    internal bool ValidateIsolatedBranding()=>Text==Branding.AppName&&Icon?.Handle==Branding.AppIcon.Handle&&tray.Icon?.Handle==Branding.AppIcon.Handle&&tray.Text==Branding.AppName&&!tray.Visible&&settings.Origin==""&&settings.Key=="";
     static bool StartupEnabled() { using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"); return key?.GetValue("MultiplaSIEM") is string; }
     static void SetStartup(bool enabled)
     {
         using var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
-        if (enabled) key.SetValue("MultiplaSIEM", "\"" + Environment.ProcessPath + "\" --tray"); else key.DeleteValue("MultiplaSIEM", false);
+        if (enabled) key.SetValue("MultiplaSIEM", "\"" + DesktopUpdateRuntime.Production().LauncherPath + "\" --tray"); else key.DeleteValue("MultiplaSIEM", false);
     }
     void OpenPanel() { Show(); WindowState = FormWindowState.Normal; Activate(); }
+    string? audioBootstrapScriptId;
     async Task LoadPanel()
     {
         if (settings.Origin == "") return;
@@ -153,7 +181,7 @@ internal partial class PanelWindow : Form
                 web.NavigationCompleted += (_, e) => { if(googleProof!=null && e.NavigationId==googleProofNavigationId){CryptographicOperations.ZeroMemory(googleProof.GetBuffer());googleProof.Dispose();googleProof=null;} };
                 web.Settings.IsWebMessageEnabled = true;
  web.WebMessageReceived+=NativeAudioMessage;
- await web.AddScriptToExecuteOnDocumentCreatedAsync("if(window===window.top&&location.origin==="+JsonSerializer.Serialize(origin.GetLeftPart(UriPartial.Authority))+"){Object.defineProperty(window,'multiplaNativeAudio',{value:true,writable:false,configurable:false});}"); web.Settings.AreDefaultContextMenusEnabled = false;
+ web.Settings.AreDefaultContextMenusEnabled = false;
                 web.Settings.IsGeneralAutofillEnabled = false; web.Settings.IsPasswordAutosaveEnabled = false;
                 web.NavigationStarting += (_, e) => {
                     if(googleProof!=null && origin!=null && SecurityPolicy.SameOrigin(origin,e.Uri) && new Uri(e.Uri).AbsolutePath=="/auth/desktop/consume") googleProofNavigationId=e.NavigationId;
@@ -174,13 +202,15 @@ internal partial class PanelWindow : Form
                 };
                 initialized = true;
             }
+            if(audioBootstrapScriptId!=null)browser.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(audioBootstrapScriptId);
+            audioBootstrapScriptId = await browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync("if(window===window.top&&location.origin==="+JsonSerializer.Serialize(origin.GetLeftPart(UriPartial.Authority))+"){Object.defineProperty(window,'multiplaNativeAudio',{value:true,writable:false,configurable:false});}");
             browser.CoreWebView2.Navigate(origin.AbsoluteUri);
         }
         catch (Exception) { state.Text = "Não foi possível abrir o painel. Verifique HTTPS e WebView2 Runtime."; }
     }
     async Task Configure()
     {
-        using var dialog = new Form { Icon=Branding.AppIcon, Text = "Conexão e alertas", Width = 620, Height = 460, StartPosition = FormStartPosition.CenterParent };
+        using var dialog = new Form { Icon=Branding.AppIcon, Text = "Conexão e alertas · "+Branding.AppName, Width = 620, Height = 460, StartPosition = FormStartPosition.CenterParent };
         var layout = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(16) };
         var url = new TextBox { Text = settings.Origin, Width = 550 };
         var key = new TextBox { Text = settings.Key, Width = 550, UseSystemPasswordChar = true, MaxLength = 43 };
@@ -199,7 +229,7 @@ internal partial class PanelWindow : Form
             if (key.Text.Length != 0 && (key.Text.Length != 43 || key.Text.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '_' && c != '-'))) throw new ArgumentException("Chave de vínculo inválida.");
             if (settings.Origin != "" && settings.Origin != uri.AbsoluteUri && initialized) throw new ArgumentException("Para trocar de servidor, saia e abra novamente o app. A sessão do painel não será transferida.");
             settings = new Preferences(uri.AbsoluteUri, key.Text, outputs[devices.SelectedIndex].Id, sound.Checked, settings.Volume, settings.SoundType);
-            SecureStore.Save(settings); StopSound(); seen.Clear(); failures = 0; nextPoll = default;
+            SavePreferences(settings); StopSound(); seen.Clear(); failures = 0; nextPoll = default;
             await LoadPanel(); await Poll();
         }
         catch (ArgumentException ex) { MessageBox.Show(this, ex.Message); }
@@ -366,9 +396,10 @@ internal partial class PanelWindow : Form
         dialog.Controls.Add(list);dialog.Controls.Add(hint);dialog.Controls.Add(read);dialog.Controls.Add(readAll);dialog.Controls.Add(refresh);RefreshNotificationWindow();dialog.Show(this);
         nextPoll=default;_ = Poll();
     }
+    bool resourcesDisposed;
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { lifetime.Cancel(); pendingGoogleLogin?.Cancel(); notificationWindow?.Close(); googleProof?.Dispose(); timer.Dispose(); isolationBlink.Dispose(); tray.Visible = false; tray.Dispose(); StopSound(); http.Dispose(); browser.Dispose(); lifetime.Dispose(); }
+        if (disposing && !resourcesDisposed) { resourcesDisposed=true; lifetime.Cancel(); pendingGoogleLogin?.Cancel(); notificationWindow?.Close(); googleProof?.Dispose(); timer.Dispose(); updateTimer.Dispose(); isolationBlink.Dispose(); tray.Visible = false; tray.Dispose(); StopSound(); http.Dispose(); browser.Dispose(); lifetime.Dispose(); }
         base.Dispose(disposing);
         // Profile is ephemeral; remove only this generated subdirectory, never a shared browser profile.
         try { if (Directory.Exists(profile)) Directory.Delete(profile, true); } catch { }
@@ -377,6 +408,7 @@ internal partial class PanelWindow : Form
 
 internal static class SelfTest
 {
+ static string AssemblyVersion()=>System.Reflection.Assembly.GetExecutingAssembly().GetName().Version!.ToString(3);
     public static void Run()
     {
         var origin = SecurityPolicy.Origin("https://siem.example:8443");
@@ -387,7 +419,11 @@ internal static class SelfTest
         var encrypted = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser);
         if (!ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser).SequenceEqual(plain)) throw new Exception("DPAPI failed");
         if(Branding.AppIcon.Handle==IntPtr.Zero)throw new Exception("Brand icon missing");
+ using(var associated=Icon.ExtractAssociatedIcon(Environment.ProcessPath!)){if(associated==null)throw new Exception("PE icon missing");using var b=associated.ToBitmap();var green=0;for(var y=0;y<b.Height;y++)for(var x=0;x<b.Width;x++){var c=b.GetPixel(x,y);if(c.A>128&&c.G>c.R*1.6&&c.G>c.B)green++;}if(green<b.Width*b.Height/10)throw new Exception("PE icon is not the Multipla logo");}
+ using(var window=new Form{Icon=Branding.AppIcon,Text=Branding.AppName})using(var tray=new NotifyIcon{Icon=Branding.AppIcon,Text=Branding.AppName,Visible=false}){if(window.Icon.Handle==IntPtr.Zero||tray.Icon.Handle==IntPtr.Zero||!tray.Text.EndsWith(AssemblyVersion()))throw new Exception("Window/tray branding failed");}
+ var budget=new AudioRequestBudget();var instant=DateTimeOffset.UtcNow;for(var i=0;i<16;i++)if(!budget.Allow(instant))throw new Exception("Legitimate audio burst discarded");if(budget.Allow(instant)||!budget.Allow(instant.AddSeconds(1)))throw new Exception("Audio request limit failed");
  using(var enumerator=new MMDeviceEnumerator()){var outputs=enumerator.EnumerateAudioEndPoints(DataFlow.Render,DeviceState.Active);foreach(var device in outputs)device.Dispose();}
+ using(var panel=new PanelWindow(false,true)){if(!panel.ValidateIsolatedBranding())throw new Exception("Production PanelWindow/tray branding failed in isolated mode");}
  File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test-result.txt"), "PASS: HTTPS, origin isolation, rejected unsafe URLs, DPAPI CurrentUser, brand icon, native Windows output enumeration");
     }
 }

@@ -109,6 +109,9 @@ func (a *App) getSSHTerminal(r *http.Request) (*sshTerminal, bool) {
 	a.mu.Lock()
 	t := a.sshTerminals[r.PathValue("id")]
 	a.mu.Unlock()
+	if t != nil && t.equipment.ID == localServerSSHID && !a.hostSuperadmin(r) {
+		return nil, false
+	}
 	return t, t != nil && t.owner == strings.ToLower(session.Email)
 }
 func (t *sshTerminal) Write(data []byte) (int, error) {
@@ -236,6 +239,10 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 		if !decode(w, r, &body) {
 			return
 		}
+		if body.ID == localServerSSHID && !a.hostSuperadmin(r) {
+			http.Error(w, "Terminal do servidor exige Superadmin", 403)
+			return
+		}
 		d, err := a.sshEquipment(body.ID)
 		if err != nil {
 			http.Error(w, err.Error(), 400)
@@ -265,6 +272,10 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 		}
 		if len(body.Key) > 16384 {
 			http.Error(w, "identificação inválida", 400)
+			return
+		}
+		if body.ID == localServerSSHID && !a.hostSuperadmin(r) {
+			http.Error(w, "Terminal do servidor exige Superadmin", 403)
 			return
 		}
 		d, err := a.sshEquipment(body.ID)
@@ -300,10 +311,6 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 		writeJSON(w, map[string]bool{"ok": true})
 	}))
 	mux.HandleFunc("POST /api/ssh/sessions", a.auth(func(w http.ResponseWriter, r *http.Request) {
-		if a.demo || !a.nativeTLS {
-			http.Error(w, "terminal SSH requer a instalação HTTPS; não disponível na demonstração", 503)
-			return
-		}
 		var body struct {
 			ID         string `json:"id"`
 			User       string `json:"user"`
@@ -318,6 +325,15 @@ func (a *App) registerSSHRoutes(mux *http.ServeMux) {
 			http.Error(w, "credencial excede o limite", 400)
 			return
 		}
+		if body.ID == localServerSSHID && !a.hostSuperadmin(r) {
+			http.Error(w, "Terminal do servidor exige Superadmin", 403)
+			return
+		}
+		if a.demo || !a.nativeTLS {
+			http.Error(w, "terminal SSH requer a instalação HTTPS; não disponível na demonstração", 503)
+			return
+		}
+
 		d, err := a.sshEquipment(body.ID)
 		if err != nil {
 			http.Error(w, err.Error(), 400)

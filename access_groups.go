@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"net/http"
+	"strings"
+)
 
 const (
 	groupAlerts         = "alerts"
@@ -47,7 +50,7 @@ func groupAllows(group, method, path string) bool {
 		switch path {
 		case "/auth/logout", "/api/activity", "/api/notifications/clear":
 			return method == "POST"
-		case "/api/snapshot", "/api/notifications", "/api/events/history", "/api/system/health":
+		case "/api/snapshot", "/api/notifications", "/api/events/history", "/api/system/health", "/api/problem-devices", "/api/problem-devices/events":
 			return method == "GET"
 		}
 		return false
@@ -62,4 +65,14 @@ func groupAllows(group, method, path string) bool {
 		}
 	}
 	return true
+}
+
+func (a *App) hostSuperadmin(r *http.Request) bool {
+	s, ok := a.session(r)
+	if !ok {
+		return false
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.groupLocked(s.Email) == groupSuperadmin && a.scopeLocked(s.Email).Global
 }

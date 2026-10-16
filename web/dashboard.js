@@ -1,117 +1,60 @@
-'use strict';
+ 'use strict';
 const dashboardDefaultOrder=['collection','alerts','devices','response','resources','activity','recent-alerts','posture'];
-let dashboardCardSettings={},dashboardAppliedKey="";
+let dashboardCardSettings={},dashboardAppliedKey='',dashboardEditing=false,dashboardSaving=false,dashboardSnap=true,dashboardUndo=null,dashboardEditBefore=null;
 const resourceTemplate=document.querySelector('[data-dashboard-card="resources"]').cloneNode(true);
-let dashboardEditing=false,dashboardSaving=false,dashboardDragged=null;
+const dashboardGrid=$('#dashboard-grid');
 function normalizeDashboardOrder(order){return [...new Set([...(Array.isArray(order)?order:[]),...dashboardDefaultOrder])].filter(id=>dashboardDefaultOrder.includes(id)||/^resources-[2-8]$/.test(id))}
-function dashboardOrder(){return [...$('#dashboard-grid').children].map(n=>n.dataset.dashboardCard)}
-function applyDashboardOrder(order){const grid=$('#dashboard-grid');normalizeDashboardOrder(order).forEach(id=>{const card=[...grid.children].find(n=>n.dataset.dashboardCard===id);if(card)grid.append(card)});updateDashboardMoveButtons();scheduleDashboardPack()}
-function syncDashboardLayout(order){
- if(dashboardEditing)return;
- const settings=snapshot?.preferences?.dashboard_cards||{},key=JSON.stringify([order,settings]);if(key===dashboardAppliedKey)return;
- dashboardAppliedKey=key;dashboardCardSettings=structuredClone(settings);reconcileResourceCards(order||[]);applyDashboardOrder(order);applyDashboardSizes();
-}
+function dashboardOrder(){return [...dashboardGrid.children].map(n=>n.dataset.dashboardCard)}
+function applyDashboardOrder(order){normalizeDashboardOrder(order).forEach(id=>{const card=[...dashboardGrid.children].find(n=>n.dataset.dashboardCard===id);if(card)dashboardGrid.append(card)})}
 function reconcileResourceCards(order){
- const grid=$('#dashboard-grid'),wanted=new Set(order.filter(id=>/^resources-[2-8]$/.test(id)));
- grid.querySelectorAll('[data-resource-copy]').forEach(card=>{if(!wanted.has(card.dataset.dashboardCard))card.remove()});
- for(const id of wanted){if([...grid.children].some(c=>c.dataset.dashboardCard===id))continue;const card=resourceTemplate.cloneNode(true);card.dataset.dashboardCard=id;card.dataset.resourceCopy='true';card.querySelectorAll('[id]').forEach(n=>{n.dataset.resourceRole=n.id;n.removeAttribute('id')});grid.append(card);setupDashboardCard(card)}
+ const wanted=new Set(order.filter(id=>/^resources-[2-8]$/.test(id)));
+ dashboardGrid.querySelectorAll('[data-resource-copy]').forEach(c=>{if(!wanted.has(c.dataset.dashboardCard))c.remove()});
+ for(const id of wanted){if([...dashboardGrid.children].some(c=>c.dataset.dashboardCard===id))continue;const c=resourceTemplate.cloneNode(true);c.dataset.dashboardCard=id;c.dataset.resourceCopy='true';c.querySelectorAll('[id]').forEach(n=>{n.dataset.resourceRole=n.id;n.removeAttribute('id')});dashboardGrid.append(c);setupDashboardCard(c)}
 }
-function applyDashboardSizes(){for(const card of $('#dashboard-grid').children){const c=dashboardCardSettings[card.dataset.dashboardCard]||{};const ratio=c.width_basis_points || (c.width ? c.width*2500 : 0);card.style.setProperty('--card-basis',ratio?'calc('+ratio/100+'% - '+(12*(1-ratio/10000)).toFixed(3)+'px)':'');card.style.minHeight=c.height?c.height+'px':'';card.classList.toggle('custom-width',!!ratio)}scheduleDashboardPack()}
-function setupDashboardResize(card){
- for(const edge of ['right','bottom','corner']){
-  const handle=el('button');handle.type='button';handle.className='dashboard-resize dashboard-resize-'+edge;
-  handle.setAttribute('aria-label',edge==='right'?'Redimensionar largura':edge==='bottom'?'Redimensionar altura':'Redimensionar largura e altura');
-  handle.title='Arraste para redimensionar; use as setas para ajustes';card.append(handle);
-  const update=(width,height)=>{const grid=$('#dashboard-grid'),id=card.dataset.dashboardCard,c={...(dashboardCardSettings[id]||{})};
-   if(edge!=='bottom'){c.width_basis_points=Math.round(Math.min(1,Math.max(Math.min(240,grid.clientWidth),width)/grid.clientWidth)*10000);delete c.width}
-   if(edge!=='right')c.height=Math.round(Math.max(120,Math.min(2400,height)));
-   dashboardCardSettings[id]=c;applyDashboardSizes();
-  };
-  let drag=null;
-  const finish=(cancel=false)=>{if(!drag)return;if(cancel){if(drag.previous)dashboardCardSettings[card.dataset.dashboardCard]=drag.previous;else delete dashboardCardSettings[card.dataset.dashboardCard];applyDashboardSizes()}
-   const pointer=drag.pointer;drag=null;card.classList.remove('resizing');document.body.classList.remove('dashboard-resizing');if(handle.hasPointerCapture(pointer))handle.releasePointerCapture(pointer);
-  };
-  handle.addEventListener('pointerdown',e=>{if(!dashboardEditing||dashboardSaving||e.button!==0)return;e.preventDefault();const rect=card.getBoundingClientRect();drag={pointer:e.pointerId,x:e.clientX,y:e.clientY,width:rect.width,height:rect.height,previous:dashboardCardSettings[card.dataset.dashboardCard]?structuredClone(dashboardCardSettings[card.dataset.dashboardCard]):null};handle.setPointerCapture(e.pointerId);card.classList.add('resizing');document.body.classList.add('dashboard-resizing')});
-  handle.addEventListener('pointermove',e=>{if(drag&&e.pointerId===drag.pointer)update(drag.width+e.clientX-drag.x,drag.height+e.clientY-drag.y)});
-  handle.addEventListener('pointerup',()=>finish());handle.addEventListener('pointercancel',()=>finish(true));handle.addEventListener('lostpointercapture',()=>finish(true));
-  handle.addEventListener('keydown',e=>{if(e.key==='Escape'&&drag){e.preventDefault();finish(true);return}if(!dashboardEditing||dashboardSaving||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();const rect=card.getBoundingClientRect(),step=e.shiftKey?40:10;update(rect.width+(e.key==='ArrowRight'?step:e.key==='ArrowLeft'?-step:0),rect.height+(e.key==='ArrowDown'?step:e.key==='ArrowUp'?-step:0))});
+// Capture the existing flex layout ONCE for legacy accounts. Metric refreshes
+// and ResizeObserver callbacks never pack or reorder cards.
+function initializeManualPositions(){
+ if(!dashboardGrid.clientWidth||window.matchMedia('(max-width:600px)').matches)return;
+ const base=dashboardGrid.getBoundingClientRect();
+ for(const card of dashboardGrid.children){const id=card.dataset.dashboardCard,c=dashboardCardSettings[id]||{};if(c.x!==undefined&&c.y!==undefined)continue;const r=card.getBoundingClientRect();dashboardCardSettings[id]={...c,x:Math.round(r.left-base.left),y:Math.round(r.top-base.top),pixel_width:Math.max(120,Math.round(r.width)),height:Math.min(2400,Math.max(120,Math.round(r.height)))}}
+}
+function renderManualDashboard(){
+ const mobile=window.matchMedia('(max-width:600px)').matches;dashboardGrid.classList.toggle('packed-dashboard',!mobile);let height=0,width=dashboardGrid.clientWidth;
+ for(const card of dashboardGrid.children){const c=dashboardCardSettings[card.dataset.dashboardCard]||{};if(mobile){for(const k of ['width','left','top','height','minHeight'])card.style[k]='';continue}
+  if(c.x===undefined||c.y===undefined)continue;
+  card.style.width=(c.pixel_width||Math.max(240,dashboardGrid.clientWidth*(c.width_basis_points||c.width*2500||2500)/10000))+'px';card.style.left=c.x+'px';card.style.top=c.y+'px';card.style.height=(c.height||240)+'px';card.style.minHeight='0';height=Math.max(height,c.y+(c.height||240));width=Math.max(width,c.x+(c.pixel_width||240));
  }
+ dashboardGrid.style.height=mobile?'':height+'px';dashboardGrid.style.minWidth=mobile?'':width+'px';
 }
-function addResourceCard(){if(!dashboardEditing||dashboardSaving)return;const order=dashboardOrder();const id=Array.from({length:7},(_,i)=>'resources-'+(i+2)).find(id=>!order.includes(id));if(!id){toast('Limite de oito cards de recursos.');return}order.push(id);dashboardCardSettings[id]={width:2};reconcileResourceCards(order);applyDashboardOrder(order);applyDashboardSizes();setDashboardEditing(true);renderDashboardResources(snapshot)}
-const addResourceButton=el('button','Adicionar monitoramento','secondary');addResourceButton.type='button';addResourceButton.hidden=true;$('#dashboard-edit').after(addResourceButton);addResourceButton.onclick=addResourceCard;
-function updateDashboardMoveButtons(){const cards=[...$('#dashboard-grid').children];cards.forEach((card,i)=>{card.querySelector('[data-move="-1"]').disabled=i===0;card.querySelector('[data-move="1"]').disabled=i===cards.length-1})}
-function setDashboardEditing(value){dashboardEditing=value;addResourceButton.hidden=!value;$('#dashboard-grid').classList.toggle('organizing',value);document.querySelectorAll('.dashboard-move-controls').forEach(n=>n.hidden=!value);$('#dashboard-edit').hidden=value;['save','cancel','reset'].forEach(id=>$('#dashboard-'+id).hidden=!value);$('#dashboard-layout-status').textContent=value?'Arraste as bordas ou o canto inferior para redimensionar. Arraste pelo cabeçalho para mover; os cards se encaixam automaticamente. Salve ao terminar.':'';updateDashboardMoveButtons()}
-$('#dashboard-edit').onclick=()=>setDashboardEditing(true);
-$('#dashboard-cancel').onclick=()=>{if(dashboardSaving)return;setDashboardEditing(false);dashboardAppliedKey="";syncDashboardLayout(snapshot?.preferences?.dashboard_order);renderDashboardResources(snapshot)};
-$('#dashboard-reset').onclick=()=>{if(!dashboardSaving){dashboardCardSettings={};reconcileResourceCards([]);applyDashboardOrder(dashboardDefaultOrder);applyDashboardSizes()}};
-$('#dashboard-save').onclick=async()=>{
- if(dashboardSaving)return;
- dashboardSaving=true;$('#dashboard-save').disabled=true;$('#dashboard-cancel').disabled=true;$('#dashboard-reset').disabled=true;
- $('#dashboard-layout-status').textContent='Salvando disposição…';
- try{
-  const order=dashboardOrder();await api('/api/dashboard/layout','PUT',{order,cards:dashboardCardSettings});
-  if(snapshot){snapshot.preferences=snapshot.preferences||{};snapshot.preferences.dashboard_order=order;snapshot.preferences.dashboard_cards=structuredClone(dashboardCardSettings);dashboardAppliedKey=""}
-  setDashboardEditing(false);$('#dashboard-layout-status').textContent='Disposição salva para sua conta.';
- }catch(e){$('#dashboard-layout-status').textContent='Não foi possível salvar. Sua disposição continua em edição.';toast(e.message)}
- finally{dashboardSaving=false;$('#dashboard-save').disabled=false;$('#dashboard-cancel').disabled=false;$('#dashboard-reset').disabled=false}
-};
+function applyDashboardSizes(){initializeManualPositions();renderManualDashboard()}
+function syncDashboardLayout(order){if(dashboardEditing)return;const p=snapshot?.preferences||{},settings=p.dashboard_cards||{},key=JSON.stringify([order,settings,p.dashboard_snap]);if(key===dashboardAppliedKey)return;dashboardAppliedKey=key;dashboardCardSettings=structuredClone(settings);dashboardSnap=p.dashboard_snap!==false;snapCheck.checked=dashboardSnap;reconcileResourceCards(order||[]);applyDashboardOrder(order);applyDashboardSizes()}
+function snapDashboardCard(id){if(!dashboardSnap)return;const before=structuredClone(dashboardCardSettings[id]);const after={...before};for(const k of ['x','y','pixel_width','height'])if(Number.isFinite(after[k]))after[k]=Math.round(after[k]/8)*8;after.pixel_width=Math.max(120,after.pixel_width);after.height=Math.max(120,after.height);if(JSON.stringify(before)===JSON.stringify(after))return;dashboardUndo={id,before};undoButton.disabled=false;dashboardCardSettings[id]=after;renderManualDashboard();$('#dashboard-layout-status').textContent='Alinhamento aplicado somente a este card. Desfazer restaura sua posição e tamanho manuais.'}
+const snapLabel=el('label',undefined,'check'),snapCheck=el('input');snapCheck.type='checkbox';snapCheck.checked=true;snapLabel.append(snapCheck,document.createTextNode('Alinhar este card ao soltar (grade de 8px)'));snapLabel.hidden=true;snapCheck.onchange=()=>{dashboardSnap=snapCheck.checked};
+const undoButton=el('button','Desfazer alinhamento','secondary');undoButton.type='button';undoButton.hidden=true;undoButton.disabled=true;undoButton.onclick=()=>{if(!dashboardUndo||dashboardSaving)return;dashboardCardSettings[dashboardUndo.id]=structuredClone(dashboardUndo.before);dashboardUndo=null;undoButton.disabled=true;renderManualDashboard();$('#dashboard-layout-status').textContent='Posição e tamanho manuais restaurados.'};
+const addResourceButton=el('button','Adicionar monitoramento','secondary');addResourceButton.type='button';addResourceButton.hidden=true;$('#dashboard-edit').after(addResourceButton,snapLabel,undoButton);
+function setDashboardEditing(value){dashboardEditing=value;addResourceButton.hidden=!value;snapLabel.hidden=!value;undoButton.hidden=!value;dashboardGrid.classList.toggle('organizing',value);document.querySelectorAll('.dashboard-move-controls').forEach(n=>n.hidden=!value);$('#dashboard-edit').hidden=value;['save','cancel','reset'].forEach(id=>$('#dashboard-'+id).hidden=!value);$('#dashboard-layout-status').textContent=value?'Mova pelo cabeçalho e redimensione pelas bordas. Outros cards permanecem no lugar. Desative o alinhamento para posicionamento livre; salve ao terminar.':''}
+function updateDashboardMoveButtons(){}
+addResourceButton.onclick=()=>{if(!dashboardEditing||dashboardSaving)return;const order=dashboardOrder(),id=Array.from({length:7},(_,i)=>'resources-'+(i+2)).find(id=>!order.includes(id));if(!id){toast('Limite de oito cards.');return}const bottom=Math.max(0,...Object.values(dashboardCardSettings).map(c=>(c.y||0)+(c.height||240)));dashboardCardSettings[id]={x:0,y:Math.min(48000,bottom+12),pixel_width:Math.min(600,dashboardGrid.clientWidth),height:320};order.push(id);reconcileResourceCards(order);applyDashboardOrder(order);renderManualDashboard();setDashboardEditing(true);renderDashboardResources(snapshot)};
+$('#dashboard-edit').onclick=()=>{initializeManualPositions();dashboardEditBefore={cards:structuredClone(dashboardCardSettings),order:dashboardOrder(),snap:dashboardSnap};renderManualDashboard();setDashboardEditing(true)};
+$('#dashboard-cancel').onclick=()=>{if(dashboardSaving)return;setDashboardEditing(false);dashboardUndo=null;undoButton.disabled=true;if(dashboardEditBefore){dashboardCardSettings=structuredClone(dashboardEditBefore.cards);dashboardSnap=dashboardEditBefore.snap;snapCheck.checked=dashboardSnap;reconcileResourceCards(dashboardEditBefore.order);applyDashboardOrder(dashboardEditBefore.order);renderManualDashboard()}renderDashboardResources(snapshot)};
+$('#dashboard-reset').onclick=()=>{if(dashboardSaving)return;dashboardUndo=null;undoButton.disabled=true;dashboardCardSettings={};dashboardGrid.classList.remove('packed-dashboard');dashboardGrid.style.height='';dashboardGrid.style.minWidth='';for(const c of dashboardGrid.children)c.style.cssText='';reconcileResourceCards([]);applyDashboardOrder(dashboardDefaultOrder);initializeManualPositions();renderManualDashboard()};
+$('#dashboard-save').onclick=async()=>{if(dashboardSaving)return;dashboardSaving=true;try{const order=dashboardOrder();await api('/api/dashboard/layout','PUT',{order,cards:dashboardCardSettings,snap:dashboardSnap});snapshot.preferences=snapshot.preferences||{};Object.assign(snapshot.preferences,{dashboard_order:order,dashboard_cards:structuredClone(dashboardCardSettings),dashboard_snap:dashboardSnap});dashboardAppliedKey='';setDashboardEditing(false);$('#dashboard-layout-status').textContent='Disposição salva para sua conta.'}catch(error){toast(error.message)}finally{dashboardSaving=false}};
 function setupDashboardCard(card){
- const tools=card.querySelector('.dashboard-move-controls');setupDashboardResize(card);
- if(card.dataset.resourceCopy){const remove=el('button','Remover','secondary');remove.onclick=()=>{if(dashboardSaving)return;delete dashboardCardSettings[card.dataset.dashboardCard];card.remove();updateDashboardMoveButtons()};tools.append(remove)}
-
- card.querySelectorAll('[data-move]').forEach(button=>button.onclick=()=>{
-  if(!dashboardEditing||dashboardSaving)return;
-  const order=dashboardOrder(),i=order.indexOf(card.dataset.dashboardCard),next=i+Number(button.dataset.move);
-  if(next<0||next>=order.length)return;
-  [order[i],order[next]]=[order[next],order[i]];applyDashboardOrder(order);button.focus();
- });
- setupDashboardDrag(card);dashboardSizeObserver.observe(card);
-
-}
-
-let dashboardPackFrame=0;
-function scheduleDashboardPack(){if(!dashboardPackFrame)dashboardPackFrame=requestAnimationFrame(()=>{dashboardPackFrame=0;packDashboardCards()})}
-function packDashboardCards(){
- const grid=$('#dashboard-grid');if(!grid||!grid.clientWidth)return;
- const mobile=window.matchMedia('(max-width:600px)').matches;grid.classList.toggle('packed-dashboard',!mobile);
- if(mobile){grid.style.height='';for(const card of grid.children){card.style.width='';card.style.left='';card.style.top=''}return}
- const width=grid.clientWidth,gap=12,placed=[];
- for(const card of grid.children){
-  const id=card.dataset.dashboardCard,c=dashboardCardSettings[id]||{};
-  const defaults={resources:0.5,activity:0.5,'recent-alerts':2/3,posture:1/3};
-  const ratio=c.width_basis_points?c.width_basis_points/10000:c.width?c.width/4:defaults[id]||(id.startsWith('resources-')?0.5:0.25);
-  const w=Math.min(width,Math.max(Math.min(["collection","alerts","devices","response"].includes(id)?180:240,width),width*ratio-gap*(1-ratio)));card.style.width=w+'px';
-  const h=card.getBoundingClientRect().height;
-  const candidates=[0,...placed.map(r=>r.x+r.w+gap)].filter(x=>x+w<=width+0.5);
-  let best=null;
-  for(const x of candidates){let y=0;let collision;do{collision=placed.find(r=>x<r.x+r.w+gap-0.5&&x+w+gap>r.x+0.5&&y<r.y+r.h+gap-0.5&&y+h+gap>r.y+0.5);if(collision)y=collision.y+collision.h+gap}while(collision);
-   if(!best||y<best.y-0.5||Math.abs(y-best.y)<0.5&&x<best.x)best={x,y,w,h};
-  }
-  card.style.left=best.x+'px';card.style.top=best.y+'px';placed.push(best);
- }
- grid.style.height=Math.max(0,...placed.map(r=>r.y+r.h))+'px';
-}
-const dashboardSizeObserver=new ResizeObserver(scheduleDashboardPack);
-dashboardSizeObserver.observe($('#dashboard-grid'));window.addEventListener('resize',scheduleDashboardPack);
-function setupDashboardDrag(card){
- const handle=card.querySelector('.dashboard-drag'),bar=card.querySelector('.dashboard-card-tools'),capture=$('#dashboard-grid');handle.draggable=false;let drag=null;
- const finish=(cancel=false)=>{if(!drag)return;const d=drag;drag=null;d.ghost?.remove();card.classList.remove('dashboard-moving');document.body.classList.remove('dashboard-resizing');if(cancel)applyDashboardOrder(d.order);if(capture.hasPointerCapture(d.pointer))capture.releasePointerCapture(d.pointer);scheduleDashboardPack()};
- bar.addEventListener('pointerdown',e=>{if(!dashboardEditing||dashboardSaving||e.button!==0||e.target.closest('button')&&e.target.closest('button')!==handle)return;
-  const rect=card.getBoundingClientRect();drag={pointer:e.pointerId,x:e.clientX,y:e.clientY,rect,order:dashboardOrder()};capture.setPointerCapture(e.pointerId);e.preventDefault();
- });
- capture.addEventListener('pointermove',e=>{if(!drag||drag.pointer!==e.pointerId)return;
-  if(!drag.ghost&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<5)return;
-  if(!drag.ghost){const ghost=card.cloneNode(true);ghost.removeAttribute('id');ghost.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));ghost.classList.add('dashboard-drag-ghost');ghost.setAttribute('aria-hidden','true');ghost.style.cssText='position:fixed;width:'+drag.rect.width+'px;left:'+drag.rect.x+'px;top:'+drag.rect.y+'px;pointer-events:none;z-index:1000';document.body.append(ghost);drag.ghost=ghost;card.classList.add('dashboard-moving');document.body.classList.add('dashboard-resizing')}
-  drag.ghost.style.transform='translate('+(e.clientX-drag.x)+'px,'+(e.clientY-drag.y)+'px)';
-  const gridRect=$('#dashboard-grid').getBoundingClientRect();if(e.clientX<gridRect.left||e.clientX>gridRect.right)return;
-  let nearest=null;for(const other of $('#dashboard-grid').children){if(other===card)continue;const r=other.getBoundingClientRect(),dx=Math.max(r.left-e.clientX,0,e.clientX-r.right),dy=Math.max(r.top-e.clientY,0,e.clientY-r.bottom),distance=Math.hypot(dx,dy);if(!nearest||distance<nearest.distance)nearest={other,r,distance}}
-  if(nearest){const order=dashboardOrder().filter(id=>id!==card.dataset.dashboardCard),i=order.indexOf(nearest.other.dataset.dashboardCard),r=nearest.r;const after=e.clientY>r.bottom||e.clientY>=r.top&&e.clientX>r.left+r.width/2;order.splice(i+(after?1:0),0,card.dataset.dashboardCard);if(order.join()!==dashboardOrder().join()){applyDashboardOrder(order);packDashboardCards()}}
-  if(e.clientY>innerHeight-60)window.scrollBy(0,16);else if(e.clientY<60)window.scrollBy(0,-16);
- });
- capture.addEventListener('pointerup',()=>finish());capture.addEventListener('pointercancel',()=>finish(true));capture.addEventListener('lostpointercapture',()=>finish(true));bar.addEventListener('keydown',e=>{if(e.key==='Escape'&&drag){e.preventDefault();finish(true)}});
+ const bar=card.querySelector('.dashboard-card-tools'),dragHandle=card.querySelector('.dashboard-drag');dragHandle.draggable=false;
+ const gesture=(handle,kind)=>{let current=null;
+  const finish=cancel=>{if(!current)return;const d=current;current=null;if(cancel)dashboardCardSettings[card.dataset.dashboardCard]=d.before;else snapDashboardCard(card.dataset.dashboardCard);card.classList.remove('resizing');document.body.classList.remove('dashboard-resizing');if(handle.hasPointerCapture(d.pointer))handle.releasePointerCapture(d.pointer);renderManualDashboard()};
+  handle.addEventListener('pointerdown',e=>{if(!dashboardEditing||dashboardSaving||e.button!==0||kind==='move'&&e.target.closest('button')&&e.target.closest('button')!==dragHandle||window.matchMedia('(max-width:600px)').matches)return;initializeManualPositions();const before=structuredClone(dashboardCardSettings[card.dataset.dashboardCard]);current={pointer:e.pointerId,x:e.clientX,y:e.clientY,scrollX:window.scrollX,scrollY:window.scrollY,panelScrollX:$('#overview').scrollLeft,panelScrollY:$('#overview').scrollTop,before};dashboardUndo=null;undoButton.disabled=true;e.preventDefault();handle.setPointerCapture(e.pointerId);card.classList.add('resizing');document.body.classList.add('dashboard-resizing')});
+  handle.addEventListener('pointermove',e=>{if(!current||current.pointer!==e.pointerId)return;const b=current.before,dx=e.clientX-current.x+window.scrollX-current.scrollX+$('#overview').scrollLeft-current.panelScrollX,dy=e.clientY-current.y+window.scrollY-current.scrollY+$('#overview').scrollTop-current.panelScrollY,c={...b};if(kind==='move'){c.x=Math.round(Math.max(0,Math.min(12000,b.x+dx)));c.y=Math.round(Math.max(0,Math.min(48000,b.y+dy)))}else{if(kind!=='bottom')c.pixel_width=Math.round(Math.max(120,Math.min(8000,b.pixel_width+dx)));if(kind!=='right')c.height=Math.round(Math.max(120,Math.min(2400,b.height+dy)))}dashboardCardSettings[card.dataset.dashboardCard]=c;renderManualDashboard();if(e.clientY>innerHeight-40)window.scrollBy(0,12);else if(e.clientY<40)window.scrollBy(0,-12)});
+  handle.addEventListener('pointerup',()=>finish(false));handle.addEventListener('pointercancel',()=>finish(true));handle.addEventListener('lostpointercapture',()=>finish(true));handle.addEventListener('keydown',e=>{if(e.key==='Escape'&&current){e.preventDefault();finish(true)}if(!dashboardEditing||dashboardSaving||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();const c={...dashboardCardSettings[card.dataset.dashboardCard]},step=e.shiftKey?10:1;if(kind==='move'){c.x=Math.max(0,Math.min(12000,c.x+(e.key==='ArrowRight'?step:e.key==='ArrowLeft'?-step:0)));c.y=Math.max(0,Math.min(48000,c.y+(e.key==='ArrowDown'?step:e.key==='ArrowUp'?-step:0)))}else{if(kind!=='bottom')c.pixel_width=Math.max(120,Math.min(8000,c.pixel_width+(e.key==='ArrowRight'?step:e.key==='ArrowLeft'?-step:0)));if(kind!=='right')c.height=Math.max(120,Math.min(2400,c.height+(e.key==='ArrowDown'?step:e.key==='ArrowUp'?-step:0)))}dashboardUndo=null;undoButton.disabled=true;dashboardCardSettings[card.dataset.dashboardCard]=c;renderManualDashboard()});
+ };
+ dragHandle.tabIndex=0;gesture(bar,'move');
+ for(const edge of ['right','bottom','corner']){const h=el('button');h.type='button';h.className='dashboard-resize dashboard-resize-'+edge;h.setAttribute('aria-label','Redimensionar '+edge+'; setas ajustam 1px, Shift 10px');card.append(h);gesture(h,edge)}
+ card.querySelectorAll('[data-move]').forEach(b=>{b.disabled=false;b.onclick=()=>{if(!dashboardEditing||dashboardSaving)return;const c={...dashboardCardSettings[card.dataset.dashboardCard]};c.x=Math.max(0,Math.min(12000,c.x+Number(b.dataset.move)*8));dashboardCardSettings[card.dataset.dashboardCard]=c;renderManualDashboard()}});
+ if(card.dataset.resourceCopy){const remove=el('button','Remover','secondary');remove.onclick=()=>{if(dashboardSaving)return;delete dashboardCardSettings[card.dataset.dashboardCard];card.remove();renderManualDashboard()};card.querySelector('.dashboard-move-controls').append(remove)}
 }
 document.querySelectorAll('[data-dashboard-card]').forEach(setupDashboardCard);
-
+// Resize changes only the viewport presentation, never saved coordinates.
+window.addEventListener('resize',()=>{initializeManualPositions();renderManualDashboard()});
 function setMobileNavigation(open){
  const toggle=document.getElementById('navigation-toggle'),nav=document.getElementById('main-navigation');
  document.body.classList.toggle('navigation-open',open);toggle.setAttribute('aria-expanded',String(open));toggle.setAttribute('aria-label',open?'Fechar menu':'Abrir menu');document.getElementById('navigation-backdrop').hidden=!open;
